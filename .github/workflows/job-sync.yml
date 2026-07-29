@@ -1,0 +1,50 @@
+name: Hourly Job Sync & Alert Service
+
+on:
+  schedule:
+    # Run at minute 0 of every hour
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  job-sync:
+    name: Crawl & Sync High-Match Jobs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache SQLite database
+        uses: actions/cache@v4
+        with:
+          path: local.db
+          key: sqlite-db-${{ github.run_id }}
+          restore-keys: |
+            sqlite-db-
+
+      - name: Initialize & Push Database Schema
+        run: npm run db:push
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+
+      - name: Run Global Job Sync Engine
+        run: npm run start -- sync
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          N8N_WEBHOOK_URL: ${{ secrets.N8N_WEBHOOK_URL }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}

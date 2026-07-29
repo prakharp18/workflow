@@ -1,0 +1,89 @@
+{
+  "name": "Job Intelligence Alerts Router",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "job-alert",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=💼 *New High-Match Job Found!*\n\n*Company:* {{ $json.body.companyName }}\n*Role:* {{ $json.body.title }}\n*Location:* {{ $json.body.location }}\n*Salary:* {{ $json.body.salary }}\n*Match Score:* {{ $json.body.score }}/100\n*Priority:* {{ $json.body.priorityScore }}/100\n\n*Why Recommended:*\n{{ $json.body.whyMatched }}\n\n*Missing Skills:* {{ $json.body.missingSkills.join(', ') }}\n\n[Apply Here]({{ $json.body.url }})",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-notifier",
+      "name": "Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [
+        550,
+        200
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toEmail": "YOUR_EMAIL@example.com",
+        "subject": "=🎯 Job Intelligence: Match Found at {{ $json.body.companyName }} (Score: {{ $json.body.score }})",
+        "emailFormat": "html",
+        "html": "=<h3>New Job Match Found</h3>\n<p><strong>Company:</strong> {{ $json.body.companyName }}</p>\n<p><strong>Role:</strong> {{ $json.body.title }}</p>\n<p><strong>Match Score:</strong> {{ $json.body.score }}/100</p>\n<p><strong>Why:</strong> {{ $json.body.whyMatched }}</p>\n<p><a href=\"{{ $json.body.url }}\">View Job Description & Apply</a></p>"
+      },
+      "id": "email-notifier",
+      "name": "Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        550,
+        400
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "YOUR_SMTP_CREDENTIAL_ID",
+          "name": "SMTP Credentials"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "webhook-trigger": {
+      "main": [
+        [
+          {
+            "node": "telegram-notifier",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "email-notifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "meta": {
+    "templateId": "job-intel-alerts"
+  },
+  "tags": []
+}

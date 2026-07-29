@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  job-agent:
+    build: .
+    container_name: job-agent
+    volumes:
+      - ./local.db:/app/local.db
+      - ./resume.txt:/app/resume.txt
+      - ./.env:/app/.env
+    restart: unless-stopped
