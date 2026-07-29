@@ -36,13 +36,16 @@ jobs:
           restore-keys: |
             sqlite-db-
 
-      - name: Initialize & Push Database Schema
-        run: npx drizzle-kit push
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Initialize & Migrate Database Schema
+        run: npm run db:migrate
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL || 'file:local.db' }}
 
       - name: Run Global Job Sync Engine
-        run: npm run build && node dist/cli.js sync
+        run: node dist/cli.js sync
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL || 'file:local.db' }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

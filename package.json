@@ -10,6 +10,7 @@
     "build": "tsc",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
+    "db:migrate": "node dist/db/migrate.js",
     "db:studio": "drizzle-kit studio",
     "start": "ts-node src/cli.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
