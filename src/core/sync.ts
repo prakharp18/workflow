@@ -94,9 +94,19 @@ export async function runJobSync() {
     }
   }
 
-  // 3. Crawl LinkedIn for generic roles in India
+  // 3. Crawl LinkedIn for target developer & engineering roles
   try {
-    const linkedInKeywords = ["software engineer", "frontend developer", "backend developer", "product designer"];
+    const linkedInKeywords = [
+      "software engineer", 
+      "frontend developer", 
+      "backend developer", 
+      "full stack developer", 
+      "react developer", 
+      "node.js developer", 
+      "python developer", 
+      "sde-1", 
+      "sde"
+    ];
     const linkedInJobs = await crawlLinkedIn(linkedInKeywords, "India");
     allCrawledJobs.push(...linkedInJobs);
   } catch (err) {
@@ -210,17 +220,20 @@ export async function runMatchEvaluation() {
       companyName = urlObj.hostname.replace("www.", "").split(".")[0];
     }
 
-    // Pre-filter: Focus strictly on India / local opportunities for freshers
+    // Pre-filter: Focus on India / local & remote opportunities for freshers
     const lowerLoc = (job.location || "").toLowerCase();
     const isIndiaJob = lowerLoc.includes("india") || 
                        lowerLoc.includes("bangalore") || 
+                       lowerLoc.includes("bengaluru") ||
                        lowerLoc.includes("hyderabad") || 
                        lowerLoc.includes("pune") || 
                        lowerLoc.includes("delhi") || 
                        lowerLoc.includes("gurgaon") || 
+                       lowerLoc.includes("gurugram") ||
                        lowerLoc.includes("noida") || 
                        lowerLoc.includes("mumbai") || 
-                       lowerLoc.includes("chennai");
+                       lowerLoc.includes("chennai") ||
+                       lowerLoc.includes("remote");
 
     if (!isIndiaJob && !isIndiaCompany) {
       console.log(`[Evaluation] Skipping "${job.title}" at "${companyName}" (Outside India focus region).`);
@@ -411,9 +424,9 @@ export async function runMatchEvaluation() {
         }
       }
 
-      // Send to Telegram (only if high priority match AND job is fresh - posted within 7 days)
+      // Send to Telegram (only if match priority score >= 35 AND job is fresh - posted within 7 days)
       const isFreshForAlert = hoursSincePost === null || hoursSincePost <= 168;
-      if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID && priorityScore >= 45 && isFreshForAlert) {
+      if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID && priorityScore >= 35 && isFreshForAlert) {
         console.log("[Notification] Forwarding fresh match to Telegram...");
         const telegramMessage = `🎯 <b>New High-Match Job Found!</b>\n\n` +
           `<b>Company:</b> ${companyName}\n` +
