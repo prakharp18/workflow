@@ -2,6 +2,7 @@ import { db } from "../db/db";
 import { companies, jobs, jobMatches, resumeProfile, recruiters, eventsTimeline, historicalSnapshots } from "../db/schema";
 import { eq, isNull } from "drizzle-orm";
 import { crawlLinkedIn } from "../crawler/linkedin";
+import { crawlGlobalATS } from "../crawler/globalAtsCrawler";
 import { crawlRemoteOK, crawlYCJobs } from "../crawler/rssCrawlers";
 import { getCrawler } from "../crawler/crawlerRegistry";
 import { evaluateJob } from "./matcher";
@@ -109,8 +110,12 @@ export async function runJobSync() {
     ];
     const linkedInJobs = await crawlLinkedIn(linkedInKeywords, "India");
     allCrawledJobs.push(...linkedInJobs);
+
+    // 3.5 Crawl Global ATS Boards for hidden startups
+    const globalAtsJobs = await crawlGlobalATS(linkedInKeywords, "India");
+    allCrawledJobs.push(...globalAtsJobs);
   } catch (err) {
-    console.error("[Sync] LinkedIn crawl failed:", err);
+    console.error("[Sync] LinkedIn/Global ATS crawl failed:", err);
   }
 
   // 4. Crawl RemoteOK
