@@ -3,7 +3,7 @@ name: Hourly Job Sync & Alert Service
 on:
   schedule:
     # Run at minute 0 of every hour
-    - cron: '0 * * * *'
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 jobs:
