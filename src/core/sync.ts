@@ -203,7 +203,8 @@ export async function runMatchEvaluation() {
     })
     .from(jobs)
     .leftJoin(jobMatches, eq(jobs.id, jobMatches.jobId))
-    .where(isNull(jobMatches.id));
+    .where(isNull(jobMatches.id))
+    .limit(20);
 
   console.log(`[Evaluation] Evaluating ${unmatchedJobs.length} jobs against resume: ${(activeResume.parsedJson as any).name}`);
 
