@@ -1,67 +1,95 @@
 import { BaseCrawler } from "./baseCrawler";
 import { CrawlerJob } from "./types";
-import { chromium } from "playwright";
 
 export class WorkdayCrawler extends BaseCrawler {
   async crawl(): Promise<CrawlerJob[]> {
     console.log(`[Workday] Crawling ${this.companyName} at token/URL: ${this.boardToken}...`);
     
-    // The boardToken can be the full subdomain/career page token or URL
-    // e.g. "https://stripe.myworkdayjobs.com/en-US/stripe_careers"
-    let url = this.boardToken;
-    if (!url.startsWith("http")) {
-      url = `https://${this.boardToken}.myworkdayjobs.com/en-US/Careers`;
+    let tenant = this.boardToken;
+    let careerSite = "Careers"; // Default Workday career site name
+    let baseUrl = `https://${tenant}.myworkdayjobs.com/en-US/${careerSite}`;
+
+    if (this.boardToken.startsWith("http")) {
+      try {
+        const urlObj = new URL(this.boardToken);
+        tenant = urlObj.hostname.split(".")[0];
+        const pathParts = urlObj.pathname.split("/").filter(p => p);
+        // Workday URLs usually look like /en-US/stripe_careers
+        if (pathParts.length > 1) {
+            careerSite = pathParts[1];
+        } else if (pathParts.length === 1) {
+            careerSite = pathParts[0];
+        }
+        baseUrl = `https://${tenant}.myworkdayjobs.com/en-US/${careerSite}`;
+      } catch (e) {
+          console.error("[Workday] Error parsing URL:", e);
+      }
     }
 
-    const browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext({
-      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    });
-
+    const apiUrl = `https://${tenant}.myworkdayjobs.com/wday/cxs/${tenant}/${careerSite}/jobs`;
     const crawledJobs: CrawlerJob[] = [];
+    
+    let offset = 0;
+    const limit = 20;
+    let total = 1; // start with 1 to enter loop
 
     try {
-      const page = await context.newPage();
-      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
-
-      // Workday typically uses data-automation-id="jobTitle" or data-automation-id="searchResultItem"
-      try {
-        await page.waitForSelector('[data-automation-id="jobTitle"]', { timeout: 15000 });
-      } catch (e) {
-        console.log(`[Workday] Timeout waiting for job elements at ${url}`);
-        await browser.close();
-        return [];
-      }
-
-      const jobElements = await page.$$('[data-automation-id="jobTitle"]');
-      console.log(`[Workday] Found ${jobElements.length} job elements for ${this.companyName}`);
-
-      for (const el of jobElements) {
-        try {
-          const title = (await el.innerText()).trim();
-          const href = await el.getAttribute("href");
-          
-          if (title && href) {
-            const absoluteUrl = new URL(href, url).toString();
-            crawledJobs.push({
-              title,
-              companyName: this.companyName,
-              url: absoluteUrl,
-              description: "Workday Job - click apply link to view details", // Workday descriptions require separate page load
-              location: "Remote/Hybrid",
-              postedAt: new Date(),
+        while (offset < total) {
+            console.log(`[Workday] Fetching jobs for ${this.companyName} (Offset: ${offset})...`);
+            const response = await fetch(apiUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                },
+                body: JSON.stringify({
+                    appliedFacets: {},
+                    limit: limit,
+                    offset: offset,
+                    searchText: ""
+                })
             });
-          }
-        } catch (itemErr) {
-          console.error("[Workday] Error parsing job item:", itemErr);
+
+            if (!response.ok) {
+                console.error(`[Workday] Failed to fetch API for ${this.companyName}: HTTP ${response.status} at ${apiUrl}`);
+                break;
+            }
+
+            const data = await response.json() as any;
+            
+            if (data.total !== undefined) {
+                total = data.total;
+            }
+
+            const postings = data.jobPostings || [];
+            if (postings.length === 0) break;
+
+            for (const job of postings) {
+                const absoluteUrl = `${baseUrl}${job.externalPath}`;
+                crawledJobs.push({
+                    title: job.title || "Unknown Job",
+                    companyName: this.companyName,
+                    url: absoluteUrl,
+                    description: "Workday Job - click apply link to view details",
+                    location: job.locationsText || "Remote/Hybrid",
+                    postedAt: new Date(), // Workday gives string like "Posted Today"
+                    rawJson: job
+                });
+            }
+
+            offset += limit;
+            
+            // Safety break to prevent infinite loops on weird API responses
+            if (offset > 2000) break;
+            
+            // Rate limit safety
+            await new Promise(resolve => setTimeout(resolve, 500));
         }
-      }
     } catch (err) {
-      console.error(`[Workday] Crawl failed for ${this.companyName}:`, err);
-    } finally {
-      await browser.close();
+        console.error(`[Workday] Crawl failed for ${this.companyName}:`, err);
     }
 
+    console.log(`[Workday] Found ${crawledJobs.length} total jobs for ${this.companyName}`);
     return crawledJobs;
   }
 }

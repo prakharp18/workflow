@@ -32,10 +32,10 @@ export class CompanyCrawler extends BaseCrawler {
             const lowerHref = href.toLowerCase();
 
             // Simple heuristic filter to find actual job listing URLs
-            const isJobUrl = lowerHref.includes("/job/") || lowerHref.includes("/jobs/") || lowerHref.includes("/careers/") || lowerHref.includes("/position/");
-            const isRoleTitle = lowerText.includes("engineer") || lowerText.includes("developer") || lowerText.includes("designer") || lowerText.includes("product") || lowerText.includes("sde");
+            const isJobUrl = lowerHref.includes("/job/") || lowerHref.includes("/jobs/") || lowerHref.includes("/careers/") || lowerHref.includes("/position/") || lowerHref.includes("/role/");
+            const isRoleTitle = lowerText.includes("engineer") || lowerText.includes("developer") || lowerText.includes("designer") || lowerText.includes("product") || lowerText.includes("sde") || lowerText.includes("manager") || lowerText.includes("lead");
 
-            if (isJobUrl && isRoleTitle && jobs.length < 20) {
+            if (isJobUrl && isRoleTitle) {
               // Deduplicate
               if (!jobs.some(j => j.url === absoluteUrl)) {
                 jobs.push({
@@ -46,6 +46,12 @@ export class CompanyCrawler extends BaseCrawler {
                   location: "Remote/Hybrid",
                   postedAt: new Date(),
                 });
+              }
+              
+              // Safety break for extremely large single pages
+              if (jobs.length >= 200) {
+                  console.log(`[Custom Scraper] Hit 200 job limit for ${this.companyName}, stopping early.`);
+                  break;
               }
             }
           }
