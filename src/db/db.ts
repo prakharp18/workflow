@@ -1,18 +1,18 @@
-import { drizzle } from "drizzle-orm/libsql";
-import { createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/neon-http";
+import { neon } from "@neondatabase/serverless";
 import * as schema from "./schema";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-const dbUrl = process.env.DATABASE_URL || "file:local.db";
+const dbUrl = process.env.DATABASE_URL;
 
-console.log(`[Database] Connecting to SQLite database at: ${dbUrl}`);
+if (!dbUrl) {
+  console.warn("[Database] WARNING: DATABASE_URL is not configured!");
+} else {
+  console.log("[Database] Connecting to Neon Postgres database...");
+}
 
-const client = createClient({
-  url: dbUrl,
-});
-
-export const db = drizzle(client, { schema });
-export { client };
+const sqlClient = neon(dbUrl || "postgresql://user:pass@ep-dummy.neon.tech/neondb");
+export const db = drizzle(sqlClient, { schema });
 export * as schema from "./schema";

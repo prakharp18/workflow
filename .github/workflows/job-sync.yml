@@ -5,6 +5,8 @@ on:
     # Run at minute 0 of every hour
     - cron: '*/30 * * * *'
   workflow_dispatch:
+  repository_dispatch:
+    types: [run-sync]
 
 jobs:
   job-sync:
@@ -28,26 +30,18 @@ jobs:
       - name: Install Playwright Browsers
         run: npx playwright install chromium --with-deps
 
-      - name: Cache SQLite database
-        uses: actions/cache@v4
-        with:
-          path: local.db
-          key: sqlite-db-${{ github.run_id }}
-          restore-keys: |
-            sqlite-db-
-
       - name: Build TypeScript
         run: npm run build
 
       - name: Initialize & Migrate Database Schema
         run: npm run db:migrate
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL || 'file:local.db' }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       - name: Run Global Job Sync Engine
         run: node dist/cli.js sync
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL || 'file:local.db' }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
