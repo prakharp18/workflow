@@ -1,212 +1,167 @@
-# 🎯 Autonomous AI Job Intelligence & Alert Engine
+# Workflow: Autonomous AI Job Intelligence Platform | Node.js, TypeScript, Gemini 3.1 Flash, Firecrawl, Drizzle ORM, Telegram, Cron
 
-An autonomous, end-to-end AI-powered job discovery, evaluation, and alert platform tailored specifically to candidate resume profiles. Built with **TypeScript**, **Google Gemini 3.1 Flash**, **Firecrawl API**, **Drizzle ORM**, and **Telegram Bot API**.
+An autonomous AI job discovery, evaluation, and alert platform tailored to candidate resume profiles. Integrates Google Gemini 3.1 Flash for multi-dimensional matching, Firecrawl for web scraping, Drizzle ORM for database management, Telegram for alerts, and node-cron for automated background scheduling.
+
+[![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Google Gemini](https://img.shields.io/badge/Google_Gemini-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://aistudio.google.com/)
+[![Firecrawl](https://img.shields.io/badge/Firecrawl-FF4500?style=for-the-badge)](https://www.firecrawl.dev/)
+[![Drizzle ORM](https://img.shields.io/badge/Drizzle_ORM-C5F74F?style=for-the-badge&logo=drizzle&logoColor=black)](https://orm.drizzle.team/)
+[![Telegram](https://img.shields.io/badge/Telegram-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](https://telegram.org/)
+[![Cron Scheduler](https://img.shields.io/badge/Cron-Scheduler-00599C?style=for-the-badge)](https://www.npmjs.com/package/node-cron)
 
 ---
 
-## 🏗️ System Architecture
+## Features
 
-The platform operates as a continuous intelligence pipeline that discovers companies, crawls job listings across multiple tiers, evaluates fit using LLM reasoning, and dispatches rich real-time alerts.
+| Feature | Description |
+|:---|:---|
+| **AI Resume Parsing** | Extracts candidate skills, work history, projects, and domain focus into structured JSON using Gemini 3.1 Flash. |
+| **Multi-Tier Hybrid Scraper** | Combines native ATS public JSON APIs, Firecrawl site mapping, Playwright headless browser fallback, and RSS aggregators. |
+| **Multi-Dimensional Matching** | Calculates fit score (0-100), interview probability, key skill gaps, and custom resume recommendations. |
+| **Startup Discovery Agent** | Automatically scans startup directories and Hacker News to discover unmonitored tech companies and register ATS configurations. |
+| **Rich Alert Dispatcher** | Dispatches real-time structured notification cards to Telegram for high-priority matching job listings. |
+| **Automated Background Cron** | Runs background monitoring daemons using node-cron and GitHub Actions scheduled jobs. |
+| **Tailored Outreach Generation** | Generates personalized cold emails, LinkedIn connection requests, and referral notes tailored to specific job postings. |
+
+---
+
+## System Architecture
 
 ```mermaid
 flowchart TD
-    subgraph Candidate Setup
-        A[resume.txt] -->|Parsed by Gemini 3.1| B[Structured Candidate Profile]
-    endif
+    User([Candidate / Developer]) -->|resume.txt| Parser[Resume Parser: geminiService.ts]
+    Parser -->|Structured Profile| DB[(Database: Drizzle ORM)]
+    
+    CronDaemon([Cron Daemon / GitHub Actions]) -->|Trigger Schedule| Sync[Sync Engine: sync.ts]
+    Discovery[Discovery Agent: discoveryAgent.ts] -->|Scan Startups| DB
+    Seed[Seed Configurations: seed.ts] -->|Target Companies| DB
+    
+    DB -->|Monitored List| Sync
+    
+    Sync -->|Native Public APIs| ATS[Greenhouse / Lever / Ashby APIs]
+    Sync -->|AI Site Mapping| FC[Firecrawl Engine: /v1/map & /v1/scrape]
+    Sync -->|Dynamic SPA Browser| PW[Playwright Chromium]
+    Sync -->|RSS Aggregators| RSS[LinkedIn / RemoteOK / YC RSS]
+    
+    ATS & FC & PW & RSS -->|Extracted Jobs| Dedupe[Deduplication & Storage: MD5 Hash]
+    Dedupe -->|New Jobs| Filter[Pre-Filter Rules: matcher.ts]
+    Filter -->|Passed Roles| Evaluator[Gemini Matching Engine]
+    
+    Evaluator -->|Score >= 35 & Fresh| Telegram[Telegram Bot API]
+```
 
-    subgraph Phase 1: Company Discovery & Targets
-        C[Startup Directory Scanner / YC / HN] -->|Discovery Agent| D[(Companies Database)]
-        E[Curated Company Seed List] --> D
-    end
+### Job Processing and Evaluation Sequence
 
-    subgraph Phase 2: Hybrid Crawling Infrastructure
-        D --> F{Priority & Due Check}
-        F -->|Native ATS APIs| G[Greenhouse / Lever / Ashby APIs]
-        F -->|AI Site Mapping| H[Firecrawl Engine /v1/map & /v1/scrape]
-        F -->|Dynamic SPA Browser| I[Playwright Headless Chromium]
-        F -->|Aggregators| J[LinkedIn / RemoteOK / YC RSS]
+```mermaid
+sequenceDiagram
+    actor User
+    participant CLI as CLI / Cron Daemon
+    participant Sync as Sync Engine
+    participant Scraper as Scraper Registry
+    participant AI as Gemini 3.1 Flash
+    participant TG as Telegram Bot
+    
+    User->>CLI: node dist/cli.js watch
+    CLI->>Sync: runJobSync()
+    Sync->>Scraper: getCrawler(atsType, atsUrl, companyName)
+    Scraper-->>Sync: Return jobs array
+    Sync->>Sync: Filter duplicates via MD5 hash
+    
+    loop For each new job
+        Sync->>AI: matchJob(jobDescription, resumeProfile)
+        AI-->>Sync: Return score, whyMatched, missingSkills, interviewProbability
+        Note over Sync: Priority Score calculated using freshness, momentum, and health multipliers
+        alt Priority Score >= 35 and Posted within 7 days
+            Sync->>TG: sendTelegramAlert(formattedMessage)
+            TG-->>Sync: HTTP 200 OK
+        end
     end
-
-    subgraph Phase 3: Processing & Intelligence Engine
-        G & H & I & J --> K[MD5 Deduplication & Job Storage]
-        K --> L[Rule-Based Pre-Filtering]
-        L -->|Passed Jobs| M[Gemini AI Matching Engine]
-        B --> M
-        M -->|Multi-Dimensional Scoring| N[Priority & Interview Odds Calculator]
-    end
-
-    subgraph Phase 4: Real-Time Alerts & Outreach
-        N -->|High Priority Match| O[Rich Telegram Notification Card]
-        N -->|Match Webhook| P[n8n Automation Router]
-        M -->|On-Demand| Q[Tailored Cold Email / LinkedIn Outreach]
-    end
+    Sync-->>CLI: Sync completed output
 ```
 
 ---
 
-## 🤖 How AI Powers This System
+## Technical Implementation
 
-### 1. Structured Candidate Profile Parsing (`geminiService.ts`)
-When a `resume.txt` is updated, the system feeds raw text into **Gemini 3.1 Flash** using strict JSON schema output. It extracts:
-- Core technical skills & languages
-- Experience & internship history
-- Projects & design/product achievements
-
-### 2. Multi-Dimensional Job Matching Engine (`matcher.ts`)
-Instead of primitive keyword matching, every crawled job undergoes a deep AI evaluation against the candidate's exact background. Gemini evaluates:
-- **Match Score (0-100):** Deep context analysis of required vs. candidate capabilities.
-- **Interview Probability:** Categorized as `High`, `Medium`, or `Low`.
-- **Missing Skills & Gaps:** Explicit list of missing technologies to highlight or prepare.
-- **Actionable Resume Tips:** Custom advice on which projects or achievements to emphasize when applying.
-- **Estimated Competition & Salary Range:** Algorithmic and LLM estimations.
-
-### 3. Priority Score Formula
-The engine calculates an overall **Priority Score (0-100)** incorporating job freshness, hiring momentum, company health, ATS confidence, and competition multipliers:
-
-$$\text{Priority Score} = \text{Score} \times \left(\frac{\text{Momentum}}{100}\right) \times \left(\frac{\text{Health}}{100}\right) \times \text{FreshnessMultiplier} \times \text{SizeMultiplier} \times \text{IndiaBoost}$$
-
-### 4. Automated Startup Discovery Agent (`discoveryAgent.ts`)
-Scans emerging tech ecosystems (Hacker News, YC startup lists) to automatically discover unmonitored startups, identify their ATS type, and register them into the database for continuous monitoring.
-
-### 5. Tailored Outreach Generation
-Generates custom-tailored outreach messages on demand for matched roles:
-- **Cold Email:** Targeted pitch directly addressing the hiring manager.
-- **LinkedIn Request:** Concise, personalized connection note (<300 chars).
-- **Referral Request:** Warm message for mutual connections.
-
----
-
-## 🔄 Evolution of the Crawling Architecture
-
-Scraping job sites accurately is notoriously difficult due to dynamic SPAs, custom career page layouts, and anti-bot protection (Cloudflare). This system uses a **4-Tier Hybrid Crawling Engine**:
-
-| Tier | Crawler Type | Target Platforms | Key Advantage |
-| :--- | :--- | :--- | :--- |
-| **Tier 1** | **Native Public ATS APIs** | Greenhouse, Lever, Ashby | ⚡ Sub-second response times, 100% structured JSON data, **zero API cost**. |
-| **Tier 2** | **Firecrawl AI Engine** | Custom Career Sites, Workday, SPA Portals | 🛡️ Uses Firecrawl `/v1/map` to auto-discover job links and `/v1/scrape` to bypass anti-bot walls, returning clean Markdown without maintaining fragile DOM selectors. |
-| **Tier 3** | **Playwright Browser Automation** | Complex JavaScript Sites (Fallback) | 🤖 Headless Chromium automation with stealth user-agent context for JS-rendered career portals when Firecrawl key is not active. |
-| **Tier 4** | **RSS & Global Aggregators** | RemoteOK, YC Jobs RSS, Global ATS Boards | 🌐 Scrapes high-volume job aggregators for remote and early-stage startup roles. |
-
----
-
-## 📱 Rich Real-Time Telegram Alerts
-
-When a fresh job match achieves a **Priority Score $\ge 35$**, the system dispatches an analytics-rich alert card to Telegram:
+### AI Engine Integration
+* **Structured Resume Parsing**: Raw resume text is processed through Google Gemini 3.1 Flash (`gemini-3.1-flash-lite`) enforcing a strict JSON schema output. The schema extracts candidate skills, experience, internships, projects, and technologies.
+* **Job Matching Model**: Evaluates job descriptions against the candidate profile. Generates a numeric match score (0-100), interview probability (`High`, `Medium`, `Low`), missing skill gaps, and targeted resume optimization advice.
+* **Priority Score Calculation**: Combines candidate match score with company hiring momentum, company health score, job freshness multiplier, and competition metrics:
 
 ```
-🔥 NEW HIGH-MATCH JOB ALERT!
-
-💼 Role: Software Development Engineer - Full Stack
-🏢 Company: Razorpay
-📍 Location: Bangalore, India / Hybrid
-💰 Salary: ₹18,000,000 - ₹24,000,000 PA
-⚙️ ATS System: GREENHOUSE
-
-━━━━━━━━━━━━━━━━━━━━━
-📊 MATCH ANALYTICS
-🎯 Match Score: 88/100 [🟩🟩🟩🟩🟩🟩🟩🟩⬜⬜]
-⚡ Priority Score: 92/100
-🔮 Interview Odds: 🔥 High
-👥 Competition: < 50 applicants
-📈 Company Health: 90/100 | 🚀 Momentum: 85/100
-
-━━━━━━━━━━━━━━━━━━━━━
-💡 WHY YOU'RE A FIT:
-Strong alignment with TypeScript, React, Node.js, and PostgreSQL indexing experience.
-
-⚠️ KEY SKILL GAPS:
-• Redis caching
-• Kafka message queues
-
-📝 RESUME TIP:
-Emphasize your database query optimization achievements in your application cover letter.
-
-━━━━━━━━━━━━━━━━━━━━━
-👉 CLICK HERE TO APPLY NOW
+Priority Score = MatchScore * (HiringMomentum / 100) * (CompanyHealth / 100) * FreshnessMultiplier * CompetitionMultiplier
 ```
 
----
+### Refactored Scraper Architecture
+To handle dynamic single-page applications, anti-bot protections, and varying career site layouts, the crawling model was refactored into a 4-tier hybrid architecture:
 
-## 🛠️ Tech Stack & Ecosystem
-
-- **Language & Runtime:** TypeScript, Node.js (v20+)
-- **LLM Engine:** Google Gemini API (`@google/genai` using `gemini-3.1-flash-lite`)
-- **Web Intelligence & Scraping:** Firecrawl API (`https://www.firecrawl.dev`), Playwright (`chromium`)
-- **Database & ORM:** Drizzle ORM, SQLite (`local.db`) / Neon Serverless PostgreSQL
-- **Automation & CLI:** Commander.js, Node-Cron, Telegram Bot API, n8n Webhooks
-- **DevOps & CI/CD:** Docker, Docker Compose, GitHub Actions
+1. **Native ATS Public APIs**: Directly queries native public JSON endpoints for Greenhouse, Lever, and Ashby boards. Operates with sub-second latency and zero API cost.
+2. **Firecrawl Integration**: Uses Firecrawl `/v1/map` to auto-discover job links on custom career portals without requiring manual DOM selectors, and `/v1/scrape` to fetch clean markdown descriptions while bypassing Cloudflare protection.
+3. **Playwright Browser Fallback**: Spawns a headless Chromium instance with stealth headers for complex single-page applications when Firecrawl is not configured.
+4. **RSS and Aggregator Crawlers**: Pulls remote and early-stage startup listings from RemoteOK and YC Jobs RSS feeds.
 
 ---
 
-## 🚀 Getting Started & Local Setup
+## Getting Started
 
-### 1. Prerequisites
-- **Node.js:** v20 or higher
-- **Gemini API Key:** Free key from [Google AI Studio](https://aistudio.google.com/)
-- **Firecrawl API Key (Optional):** Free key from [firecrawl.dev](https://www.firecrawl.dev/)
-- **Telegram Bot Token (Optional):** Created via `@BotFather` on Telegram
+### Prerequisites
+* Node.js (v20 or newer)
+* Google Gemini API key from Google AI Studio
+* Firecrawl API key (optional, for custom career page scraping)
+* Telegram Bot token and Chat ID (optional, for alerts)
 
-### 2. Installation
+### 1. Installation
+Clone the repository and install dependencies:
 ```bash
-# Clone the repository
 git clone https://github.com/prakharp18/workflow.git
 cd workflow
-
-# Install dependencies
 npm install
-
-# Install Playwright browser binaries
-npx playwright install chromium --with-deps
 ```
 
-### 3. Environment Configuration
-Create a `.env` file in the project root:
+### 2. Configuration
+Create a `.env` file in the root directory based on `.env.example`:
 ```env
 DATABASE_URL=file:local.db
-GEMINI_API_KEY=AIzaSyYourGeminiApiKeyHere
-FIRECRAWL_API_KEY=fc-YourFirecrawlApiKeyHere
-TELEGRAM_BOT_TOKEN=123456789:YourTelegramBotToken
-TELEGRAM_CHAT_ID=YourTelegramChatId
-N8N_WEBHOOK_URL=http://localhost:5678/webhook/job-alert
+GEMINI_API_KEY=your_gemini_api_key_here
+FIRECRAWL_API_KEY=fc-your_firecrawl_api_key_here
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+TELEGRAM_CHAT_ID=your_telegram_chat_id
+CRON_SCHEDULE="0 * * * *"
 RESUME_PATH=resume.txt
 ```
 
-### 4. Database Setup & Seeding
+### 3. Database Setup and Migration
+Initialize the database and run migrations:
 ```bash
-# Compile TypeScript
 npm run build
-
-# Push database migrations
 npm run db:migrate
-
-# Seed database with target startups
 node dist/cli.js seed
 ```
 
-### 5. Running the Engine
-```bash
-# Run a one-time manual synchronization and evaluation
-node dist/cli.js sync
-
-# Start continuous background monitoring daemon
-node dist/cli.js watch
-```
-
 ---
 
-## 💻 CLI Command Reference
+## How to Use
 
-| Command | Description |
-| :--- | :--- |
-| `node dist/cli.js sync` | Manually triggers full global A-to-Z job crawl, deduplication, and AI evaluation. |
-| `node dist/cli.js seed` | Seeds database with curated target tech companies and ATS tokens. |
-| `node dist/cli.js discover` | Runs the AI startup discovery agent to find new companies on YC & HN. |
-| `node dist/cli.js watch` | Launches background cron worker for continuous scheduled crawling. |
+### Direct CLI Commands
+* **Run full manual job synchronization and evaluation:**
+  ```bash
+  node dist/cli.js sync
+  ```
+* **Seed database with target company list:**
+  ```bash
+  node dist/cli.js seed
+  ```
+* **Scan YC and Hacker News for new startups:**
+  ```bash
+  node dist/cli.js discover
+  ```
+* **Start background cron monitoring daemon:**
+  ```bash
+  node dist/cli.js watch
+  ```
 
----
-
-## 🐳 Docker Setup
-
+### Docker Deployment
 Run using Docker Compose:
 ```bash
 docker-compose up -d --build
@@ -214,6 +169,18 @@ docker-compose up -d --build
 
 ---
 
-## 📄 License
+## Data Schema
 
-ISC License. Built for autonomous job discovery and intelligent career acceleration.
+| Table | Description |
+|:---|:---|
+| **companies** | Tracks target companies, priority, sector, hiring momentum, and ATS metadata. |
+| **jobs** | Stores scraped job postings, title, description, location, salary, and MD5 URL hash. |
+| **job_matches** | Stores AI evaluation scores, match reasoning, missing skills, and interview probability. |
+| **resume_profile** | Holds raw and parsed JSON candidate resume profile data. |
+| **recruiters** | Monitored recruiter contacts for targeted outreach. |
+
+---
+
+## Contact
+
+For questions or contributions, reach out at pporwal2019@gmail.com.
