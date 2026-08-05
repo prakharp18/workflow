@@ -1,9 +1,9 @@
-name: Hourly Job Sync & Alert Service
+name: Job Sync & Alert Service
 
 on:
   schedule:
-    # Run at minute 0 of every hour
-    - cron: '*/30 * * * *'
+    # Run every 20 minutes
+    - cron: '*/20 * * * *'
   workflow_dispatch:
   repository_dispatch:
     types: [run-sync]
@@ -27,7 +27,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Cache Playwright Browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+
       - name: Install Playwright Browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install chromium --with-deps
 
       - name: Build TypeScript
@@ -43,6 +51,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          N8N_WEBHOOK_URL: ${{ secrets.N8N_WEBHOOK_URL }}
+
