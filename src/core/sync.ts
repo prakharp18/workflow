@@ -433,20 +433,42 @@ export async function runMatchEvaluation() {
       // Send to Telegram (only if match priority score >= 35 AND job is fresh - posted within 7 days)
       const isFreshForAlert = hoursSincePost === null || hoursSincePost <= 168;
       if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID && priorityScore >= 35 && isFreshForAlert) {
-        console.log("[Notification] Forwarding fresh match to Telegram...");
-        const telegramMessage = `🎯 <b>New High-Match Job Found!</b>\n\n` +
-          `<b>Company:</b> ${companyName}\n` +
-          `<b>Role:</b> ${job.title}\n` +
-          `<b>Location:</b> ${job.location || "Remote"}\n` +
-          `<b>Salary:</b> ${salaryEstimate || "N/A"}\n` +
-          `<b>ATS Detected:</b> ${atsType.toUpperCase()}\n` +
-          `<b>Hiring Momentum:</b> ${hiringMomentum}/100\n` +
-          `<b>Company Health:</b> ${companyHealth}/100\n` +
-          `<b>Match Score:</b> ${score}/100\n` +
-          `<b>Priority Score:</b> ${priorityScore}/100\n\n` +
-          `<b>Why Recommended:</b>\n${whyMatched}\n\n` +
-          `<b>Missing Skills:</b> ${(missingSkills as string[] || []).join(", ") || "None"}\n\n` +
-          `👉 <a href="${job.url}">Apply Here</a>`;
+        console.log("[Notification] Forwarding rich match alert to Telegram...");
+        
+        // Progress bar helper
+        const progressFilled = Math.min(10, Math.max(0, Math.round(score / 10)));
+        const progressBar = "🟩".repeat(progressFilled) + "⬜".repeat(10 - progressFilled);
+        
+        // Interview Probability emoji badge
+        let probBadge = "⚡ Medium";
+        if (interviewProbability?.toLowerCase() === "high") probBadge = "🔥 High";
+        else if (interviewProbability?.toLowerCase() === "low") probBadge = "❄️ Low";
+
+        const missingList = (missingSkills as string[] || []);
+        const missingFormatted = missingList.length > 0 
+          ? missingList.map(s => `• ${s}`).join("\n") 
+          : "✅ None! Perfect skill alignment.";
+
+        const telegramMessage = 
+          `🔥 <b>NEW HIGH-MATCH JOB ALERT!</b>\n\n` +
+          `💼 <b>Role:</b> ${job.title}\n` +
+          `🏢 <b>Company:</b> ${companyName}\n` +
+          `📍 <b>Location:</b> ${job.location || "Remote / Hybrid"}\n` +
+          `💰 <b>Salary:</b> ${salaryEstimate || job.salary || "Competitive / Not Disclosed"}\n` +
+          `⚙️ <b>ATS System:</b> ${atsType.toUpperCase()}\n\n` +
+          `━━━━━━━━━━━━━━━━━━━━━\n` +
+          `📊 <b>MATCH ANALYTICS</b>\n` +
+          `🎯 <b>Match Score:</b> ${score}/100 [${progressBar}]\n` +
+          `⚡ <b>Priority Score:</b> ${priorityScore}/100\n` +
+          `🔮 <b>Interview Odds:</b> ${probBadge}\n` +
+          `👥 <b>Competition:</b> ${estimatedCompetition || "< 50 applicants"}\n` +
+          `📈 <b>Company Health:</b> ${companyHealth}/100 | 🚀 <b>Momentum:</b> ${hiringMomentum}/100\n\n` +
+          `━━━━━━━━━━━━━━━━━━━━━\n` +
+          `💡 <b>WHY YOU'RE A FIT:</b>\n${whyMatched}\n\n` +
+          `⚠️ <b>KEY SKILL GAPS:</b>\n${missingFormatted}\n\n` +
+          (resumeGaps ? `📝 <b>RESUME TIP:</b>\n${resumeGaps}\n\n` : "") +
+          `━━━━━━━━━━━━━━━━━━━━━\n` +
+          `👉 <a href="${job.url}"><b>CLICK HERE TO APPLY NOW</b></a>`;
         
         await sendTelegramAlert(telegramMessage);
       }

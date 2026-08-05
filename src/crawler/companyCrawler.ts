@@ -1,11 +1,22 @@
 import { BaseCrawler } from "./baseCrawler";
 import { CrawlerJob } from "./types";
 import { chromium } from "playwright";
+import { crawlCompanyWithFirecrawl } from "./firecrawlCrawler";
 
 export class CompanyCrawler extends BaseCrawler {
   async crawl(): Promise<CrawlerJob[]> {
     console.log(`[Custom Scraper] Crawling custom career page for ${this.companyName} at: ${this.boardToken}...`);
     
+    // Priority 1: Use Firecrawl if API Key is configured for 100% precision & anti-bot bypass
+    if (process.env.FIRECRAWL_API_KEY) {
+      const firecrawlJobs = await crawlCompanyWithFirecrawl(this.boardToken, this.companyName);
+      if (firecrawlJobs.length > 0) {
+        return firecrawlJobs;
+      }
+      console.log(`[Custom Scraper] Firecrawl returned 0 results. Falling back to Playwright browser...`);
+    }
+
+    // Priority 2: Playwright headless browser fallback
     const browser = await chromium.launch({ headless: true });
     const context = await browser.newContext({
       userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
