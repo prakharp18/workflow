@@ -2,7 +2,9 @@ node_modules/
 dist/
 .env
 local.db
+resume.txt
 *.log
 .DS_Store
+
 
 

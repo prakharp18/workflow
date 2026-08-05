@@ -1,58 +1,31 @@
-PRAKHAR PORWAL
-+91-9415430525 | pporwal2019@gmail.com  LinkedIn  GitHub | LeetCode | Portfolio
+SAMPLE CANDIDATE
++1 (555) 019-2834 | candidate@example.com | San Francisco, CA
+
 Professional Summary
-Full Stack Developer with hands-on experience in production web applications serving 10,000+ users, cutting query times by
-40%, and fine-tuning LLMs with Reinforcement Learning from Human Feedback (RLHF) for customer support domains.
-Proficient in TypeScript, React.js, Next.js, Node.js, and PostgreSQL, building secure and performant systems across Agile and
-CI/CD-driven workflows.
-Education
-Ajay Kumar Garg Engineering College
-Bachelor of Technology Computer Science and Engineering
+Full Stack Developer with experience in building scalable web applications, REST APIs, and microservices. Proficient in TypeScript, React, Node.js, and PostgreSQL.
+
 Technical Skills
-Languages: JavaScript (ES6+), TypeScript, Java
-Frontend: HTML5, CSS3, React.js, Next.js 15, Tailwind CSS, Redux
-Backend: Node.js, Express.js, REST APIs, Authentication (JWT, OAuth 2.0)
-Databases: PostgreSQL, MongoDB, Supabase
-Ghaziabad, India
-June 2026
-Tools & Practices: Git, Docker, Jest, CI/CD, Agile, System Design, Data Structures & Algorithms, AWS/Azure/GCP
-(Fundamentals), Figma
+• Languages: JavaScript, TypeScript, Python, SQL
+• Frontend: React.js, Next.js, HTML5, CSS3, Tailwind CSS
+• Backend: Node.js, Express.js, REST APIs, GraphQL
+• Databases: PostgreSQL, MongoDB, SQLite
+• Cloud & Tools: Docker, Git, CI/CD, Jest, AWS
+
 Professional Experience
-LLM Fine-tuning Intern
-Ethara AI
-Feb 2026 May 2026
-Remote
-• Fine-tuned LLMs on customer support datasets using Reinforcement Learning from Human Feedback (RLHF) via the
-MultiMango platform, reducing hallucinations across conversational use cases.
-• Built data pipelines for cleaning, deduplication, and prompt formatting; iterated on reward model feedback to improve
-accuracy on task-specific benchmarks.
-Full Stack Developer Intern
-The Social Artist
-Aug 2025 Oct 2025
-Remote
-• Built RESTful APIs for web apps serving 10,000+ monthly users reduced PostgreSQL query time by 40% via B-tree
-indexing.
-• Led TypeScript migration across 50+ React components with code-splitting and lazy loading, cutting bundle size by
-35% and improving TTI by 28%.
-Technical Projects
-Vox: Anonymous Messaging Platform Next.js 15, TypeScript, MongoDB, NextAuth, Tailwind CSS
-• Built a full-stack messaging app with Next.js 15 App Router and React Server Components, reducing client-side JS
-bundle by 40% and FCP to under 1.2s.
-Implemented auth with NextAuth.js, cryptographic OTP, and a custom Sliding Window Rate Limiter to block
-brute-force attacks; enforced schema integrity via Zod at API boundaries.
-Graft: CLI Task Automation Node.js, TypeScript, Google Tasks API, OAuth 2.0, MCP, n8n
-• Built a CLI tool integrating Google Tasks API and OAuth 2.0 with NLP parsing; exposed 5 MCP tools for
-natural-language task management with sub-200ms response time.
-• Automated reminder workflows via n8n triggered by MCP events, improving task completion rate by 60%.
-PizFlow (Active) Node.js, TypeScript, Playwright, LangGraph, Ollama/OpenAI, Lighthouse, axe-core
-• Building an agentic AI website optimizer using LangGraph-orchestrated Planner, Browser, Observer, and Critic agents to
-execute goal-driven workflows and identify conversion bottlenecks.
-• Integrating Playwright, Lighthouse, and axe-core to produce execution traces, journey success scores, and AI-generated
-$A/B$ testing recommendations from real browser interactions.
-Achievements & Certifications
- International Conference Publication: Co-authored research on "Hybrid AI-Based Tuberculosis Detection and
-Regional Environmental Correlation" at ICDPN-2025 (Springer, November 2025).
-• Finalist among 50+ teams in Inter-College Hackathon for a smart grid cybersecurity solution built with Python and
-network monitoring tools.
-Solved 200+ DSA problems on LeetCode | Python Programming Specialization (Infosys Springboard) | AI & ML
-Certification (HP Life).
+Software Engineer | Tech Corp
+Jan 2024 – Present
+• Developed REST APIs and microservices serving high-volume user traffic.
+• Optimized database queries and improved page load performance by 35%.
+• Implemented automated CI/CD deployment pipelines using GitHub Actions.
+
+Frontend Developer Intern | Web Solutions
+Jun 2023 – Dec 2023
+• Built responsive UI components using React and TypeScript.
+• Integrated REST endpoints and state management using Redux.
+
+Projects
+• AI Task Automation CLI: Node.js tool for managing workflows with natural language processing.
+• E-Commerce Dashboard: Full-stack React & Node.js application with PostgreSQL database.
+
+Education
+Bachelor of Science in Computer Science | State University (2020 – 2024)
