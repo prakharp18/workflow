@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, boolean, jsonb, index } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 export const companies = pgTable("companies", {
@@ -35,6 +35,12 @@ export const jobs = pgTable("jobs", {
   rawJson: jsonb("raw_json"),
   applicantCount: integer("applicant_count"),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => {
+  return {
+    hashIdx: index("jobs_hash_idx").on(table.hash),
+    companyIdIdx: index("jobs_company_id_idx").on(table.companyId),
+    postedAtIdx: index("jobs_posted_at_idx").on(table.postedAt),
+  };
 });
 
 export const resumeProfile = pgTable("resume_profile", {
@@ -56,6 +62,11 @@ export const jobMatches = pgTable("job_matches", {
   priorityScore: integer("priority_score"),
   outreach: jsonb("outreach"),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => {
+  return {
+    jobIdIdx: index("job_matches_job_id_idx").on(table.jobId),
+    priorityScoreIdx: index("job_matches_priority_score_idx").on(table.priorityScore),
+  };
 });
 
 export const recruiters = pgTable("recruiters", {

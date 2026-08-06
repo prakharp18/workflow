@@ -127,6 +127,12 @@ async function runMigrations() {
       );
     `;
 
+    await sql`CREATE INDEX IF NOT EXISTS jobs_hash_idx ON jobs(hash);`;
+    await sql`CREATE INDEX IF NOT EXISTS jobs_company_id_idx ON jobs(company_id);`;
+    await sql`CREATE INDEX IF NOT EXISTS jobs_posted_at_idx ON jobs(posted_at);`;
+    await sql`CREATE INDEX IF NOT EXISTS job_matches_job_id_idx ON job_matches(job_id);`;
+    await sql`CREATE INDEX IF NOT EXISTS job_matches_priority_score_idx ON job_matches(priority_score);`;
+
     console.log("[Database] Neon Postgres schema initialized successfully!");
   } catch (err) {
     console.error("[Database] Schema migration failed:", err);

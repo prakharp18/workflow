@@ -142,12 +142,14 @@ export async function runJobSync() {
   for (const jobData of allCrawledJobs) {
     const hash = crypto.createHash("md5").update(jobData.url).digest("hex");
     
-    // Check duplicate
-    const existing = await db.query.jobs.findFirst({
-      where: eq(jobs.hash, hash),
-    });
+    // Check duplicate (select only id to minimize Neon data transfer)
+    const existing = await db
+      .select({ id: jobs.id })
+      .from(jobs)
+      .where(eq(jobs.hash, hash))
+      .limit(1);
 
-    if (!existing) {
+    if (existing.length === 0) {
       if (!jobData.title) continue;
       try {
         await db.insert(jobs).values({
