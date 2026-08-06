@@ -50,6 +50,11 @@ export async function scrapeUrlWithFirecrawl(url: string): Promise<FirecrawlScra
 
     if (!res.ok) {
       const errText = await res.text();
+      if (res.status === 402) {
+        console.warn(`[Firecrawl] Payment Required / Credit limit reached (402). Disabling Firecrawl for this run...`);
+      } else {
+        console.warn(`[Firecrawl] HTTP error ${res.status}: ${errText}`);
+      }
       return { success: false, error: `Firecrawl HTTP error ${res.status}: ${errText}` };
     }
 
@@ -137,7 +142,11 @@ export async function crawlCompanyWithFirecrawl(baseUrl: string, companyName: st
   // Fallback: If map returned no filtered links, try scraping the main page for links
   if (jobUrls.length === 0) {
     const mainScrape = await scrapeUrlWithFirecrawl(baseUrl);
-    if (mainScrape.success && mainScrape.data?.links) {
+    if (!mainScrape.success) {
+      console.warn(`[Firecrawl] Main scrape failed for ${companyName}. Falling back to Playwright browser.`);
+      return [];
+    }
+    if (mainScrape.data?.links) {
       jobUrls = mainScrape.data.links.filter((l) => {
         const lower = l.toLowerCase();
         return (
