@@ -112,8 +112,7 @@ export async function matchJob(
 ): Promise<JobMatchResult> {
   checkApiKey();
   const prompt = `
-Compare the job description against the candidate's resume and perform a thorough match.
-Return a structured JSON output.
+Compare the job description against the candidate's resume and perform an accurate match evaluation for an Entry Level / Early Career software developer (0-2 YOE).
 
 Candidate Resume Details:
 ${JSON.stringify(resume, null, 2)}
@@ -123,6 +122,11 @@ Company: ${companyName}
 Title: ${jobTitle}
 Description:
 ${jobDescription}
+
+Important Evaluation Guidelines:
+1. Experience Level Strictness: If the job strictly requires Senior / Staff / Principal / Lead experience or 3+ years of mandatory post-grad experience, set score lower than 40 and applyRecommendation to "Skip".
+2. Salary Estimate: Provide salary estimates in INR (₹ Lakhs/yr or ₹ LPA, e.g., "₹12 - ₹18 Lakhs/yr"). If USD is listed in JD, convert at 1 USD = 85 INR.
+3. Resume Gaps / Missing Skills: Keep missingSkills and resumeGaps concise, direct, and actionable (e.g., "Lacks AWS production deployment & GraphQL experience").
 `;
 
   try {
@@ -135,11 +139,11 @@ ${jobDescription}
           type: "OBJECT",
           properties: {
             score: { type: "INTEGER", description: "Match score from 0 to 100" },
-            whyMatched: { type: "STRING", description: "Clear explanation of how the candidate fits or doesn't fit" },
+            whyMatched: { type: "STRING", description: "Concise fit summary in 1-2 bullet points max" },
             missingSkills: { type: "ARRAY", items: { type: "STRING" }, description: "Skills requested in JD but missing in resume" },
-            resumeGaps: { type: "STRING", description: "Specific missing experiences or gaps relative to this role" },
+            resumeGaps: { type: "STRING", description: "Concise note on where candidate is lacking and what to improve" },
             interviewProbability: { type: "STRING", description: "Probability of getting an interview: High, Medium, or Low" },
-            salaryEstimate: { type: "STRING", description: "Estimated salary if range is present or estimated based on role" },
+            salaryEstimate: { type: "STRING", description: "Estimated salary in INR (₹ Lakhs/yr or ₹ LPA)" },
             applyRecommendation: { type: "STRING", description: "Recommendation: Apply or Skip" },
             estimatedCompetition: { type: "STRING", description: "Estimated applicant competition level: High, Medium, Low" },
             priorityScore: { type: "INTEGER", description: "Priority score from 0 to 100 (combination of match score and freshness)" },
