@@ -432,29 +432,26 @@ export async function runMatchEvaluation() {
         }
       }
 
-      // Send to Telegram (only if match priority score >= 35 AND job is fresh - posted within 7 days)
       const isFreshForAlert = hoursSincePost === null || hoursSincePost <= 168;
       if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID && priorityScore >= 35 && isFreshForAlert) {
         console.log("[Notification] Forwarding match alert to Telegram...");
         
+        const inrSalary = formatSalaryToINR(salaryEstimate || job.salary);
         const missingList = (missingSkills as string[] || []);
         const missingFormatted = missingList.length > 0 ? missingList.join(", ") : "None";
+        const gapInfo = resumeGaps || missingFormatted;
 
         const telegramMessage = 
-          `<b>${job.title}</b> at <b>${companyName}</b>\n\n` +
-          `Location: ${job.location || "Remote"}\n` +
-          `Salary: ${salaryEstimate || job.salary || "Not Disclosed"}\n` +
-          `Match Score: ${score}/100\n` +
-          `Priority Score: ${priorityScore}/100\n` +
-          `Interview Probability: ${interviewProbability || "Medium"}\n\n` +
-          `Fit: ${whyMatched}\n` +
-          `Missing Skills: ${missingFormatted}\n\n` +
-          `<a href="${job.url}">Apply Here</a>`;
+          `<b>Company:</b> ${companyName}\n` +
+          `<b>Role:</b> ${job.title}\n` +
+          `<b>Location:</b> ${job.location || "Remote"}\n` +
+          `<b>Salary:</b> ${inrSalary}\n\n` +
+          `<b>Requirements / Skill Gaps:</b>\n${gapInfo}\n\n` +
+          `<a href="${job.url}">Apply Link</a>`;
         
         await sendTelegramAlert(telegramMessage);
       }
     } else {
-      // Even if it didn't match, insert a score of 0 or filter status to prevent re-evaluation
       await db.insert(jobMatches).values({
         jobId: job.id,
         score: evalResult.evaluation?.score || 0,
@@ -463,6 +460,55 @@ export async function runMatchEvaluation() {
       });
     }
   }
+}
+
+export function formatSalaryToINR(rawSalary: string | null | undefined): string {
+  if (!rawSalary || rawSalary.toLowerCase() === "not disclosed" || rawSalary.toLowerCase() === "n/a") {
+    return "Not Disclosed";
+  }
+  const clean = rawSalary.trim();
+  if (clean.includes("INR") || clean.toLowerCase().includes("lpa") || clean.toLowerCase().includes("lakh")) {
+    return clean;
+  }
+
+  const exchangeRate = 85;
+  const usdMatch = clean.match(/(\$|\bUSD\b)?\s*([\d,]+(?:\.\d+)?)\s*(k|kilo|thousand|m|million)?(?:\s*-\s*(\$|\bUSD\b)?\s*([\d,]+(?:\.\d+)?)\s*(k|kilo|thousand|m|million)?)?/i);
+
+  if (usdMatch) {
+    const parseAmount = (valStr: string, multiplierStr: string) => {
+      let num = parseFloat(valStr.replace(/,/g, ""));
+      if (isNaN(num)) return 0;
+      const mult = (multiplierStr || "").toLowerCase();
+      if (mult === "k" || mult === "kilo" || mult === "thousand") num *= 1000;
+      else if (mult === "m" || mult === "million") num *= 1000000;
+      return num;
+    };
+
+    const num1 = parseAmount(usdMatch[2], usdMatch[3]);
+    const num2 = usdMatch[5] ? parseAmount(usdMatch[5], usdMatch[6]) : null;
+
+    const toInrFormat = (numInUsd: number) => {
+      const inrTotal = numInUsd * exchangeRate;
+      if (inrTotal >= 10000000) {
+        return `INR ${(inrTotal / 10000000).toFixed(2)} Cr`;
+      } else if (inrTotal >= 100000) {
+        return `INR ${(inrTotal / 100000).toFixed(1)} Lakhs`;
+      } else {
+        return `INR ${Math.round(inrTotal).toLocaleString("en-IN")}`;
+      }
+    };
+
+    if (num1 > 0) {
+      const formatted1 = toInrFormat(num1);
+      if (num2 && num2 > 0) {
+        const formatted2 = toInrFormat(num2);
+        return `${formatted1} - ${formatted2}/yr`;
+      }
+      return `${formatted1}/yr`;
+    }
+  }
+
+  return clean;
 }
 
 async function sendTelegramAlert(message: string) {
