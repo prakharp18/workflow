@@ -5,13 +5,35 @@ export interface ATSConfig {
   companyName: string;
 }
 
-// Greenhouse API
+function extractToken(input: string): string {
+  if (!input) return "";
+  let clean = input.trim();
+  if (clean.startsWith("http://") || clean.startsWith("https://")) {
+    try {
+      const url = new URL(clean);
+      const parts = url.pathname.split("/").filter(p => p && p !== "embed" && p !== "job_board" && p !== "v1" && p !== "iframe");
+      if (parts.length > 0) {
+        return parts[0];
+      }
+    } catch (e) {}
+  }
+  return clean.replace(/\/$/, "");
+}
+
 export async function crawlGreenhouse(config: ATSConfig): Promise<CrawlerJob[]> {
-  const url = `https://boards-api.greenhouse.io/v1/boards/${config.boardToken}/jobs?content=true`;
-  console.log(`[Greenhouse] Crawling ${config.companyName}...`);
+  const token = extractToken(config.boardToken);
+  if (!token) return [];
+  
+  const url = `https://boards-api.greenhouse.io/v1/boards/${token}/jobs?content=true`;
+  console.log(`[Greenhouse] Crawling ${config.companyName} (Token: ${token})...`);
   
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/json",
+      },
+    });
     if (!res.ok) {
       throw new Error(`HTTP error ${res.status}`);
     }
@@ -33,13 +55,20 @@ export async function crawlGreenhouse(config: ATSConfig): Promise<CrawlerJob[]> 
   }
 }
 
-// Lever API
 export async function crawlLever(config: ATSConfig): Promise<CrawlerJob[]> {
-  const url = `https://api.lever.co/v0/postings/${config.boardToken}?mode=json`;
-  console.log(`[Lever] Crawling ${config.companyName}...`);
+  const token = extractToken(config.boardToken);
+  if (!token) return [];
+
+  const url = `https://api.lever.co/v0/postings/${token}?mode=json`;
+  console.log(`[Lever] Crawling ${config.companyName} (Token: ${token})...`);
 
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/json",
+      },
+    });
     if (!res.ok) {
       throw new Error(`HTTP error ${res.status}`);
     }
@@ -61,30 +90,45 @@ export async function crawlLever(config: ATSConfig): Promise<CrawlerJob[]> {
   }
 }
 
-// Ashby API
 export async function crawlAshby(config: ATSConfig): Promise<CrawlerJob[]> {
-  const url = `https://api.ashbyhq.com/v1/iframe/${config.boardToken}/jobs`;
-  console.log(`[Ashby] Crawling ${config.companyName}...`);
+  const token = extractToken(config.boardToken);
+  if (!token) return [];
 
-  try {
-    const res = await fetch(url);
-    if (!res.ok) {
-      throw new Error(`HTTP error ${res.status}`);
+  console.log(`[Ashby] Crawling ${config.companyName} (Token: ${token})...`);
+
+  const endpoints = [
+    `https://api.ashbyhq.com/posting-api/job-board/${token}?includeLocation=true`,
+    `https://api.ashbyhq.com/v1/iframe/${token}/jobs`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Accept": "application/json",
+        },
+      });
+      if (!res.ok) continue;
+
+      const data = (await res.json()) as any;
+      const jobList = data.jobs || data.postings || [];
+      if (!Array.isArray(jobList) || jobList.length === 0) continue;
+
+      return jobList.map((job: any) => ({
+        title: job.title,
+        companyName: config.companyName,
+        url: job.jobUrl || job.hostedUrl || `https://jobs.ashbyhq.com/${token}/${job.id}`,
+        description: job.descriptionHtml || job.description || job.summary || "",
+        location: typeof job.location === "string" ? job.location : job.locationName || job.location?.name || "Remote",
+        postedAt: job.publishedAt ? new Date(job.publishedAt) : new Date(),
+        rawJson: job,
+      }));
+    } catch (error) {
+      console.warn(`[Ashby] Endpoint failed for ${config.companyName} (${url}):`, error);
     }
-    const data = (await res.json()) as any;
-    if (!data.jobs) return [];
-
-    return data.jobs.map((job: any) => ({
-      title: job.title,
-      companyName: config.companyName,
-      url: job.jobUrl,
-      description: job.descriptionHtml || job.description || "",
-      location: job.location || "Remote",
-      postedAt: job.publishedAt ? new Date(job.publishedAt) : new Date(),
-      rawJson: job,
-    }));
-  } catch (error) {
-    console.error(`[Ashby] Error crawling ${config.companyName}:`, error);
-    return [];
   }
+
+  console.error(`[Ashby] All endpoints failed for ${config.companyName}`);
+  return [];
 }
