@@ -10,6 +10,7 @@ import { registerDiscoveredCompany } from "./core/intelligenceAgent";
 import { startBackgroundWorker } from "./workers/cron";
 import { runSeed } from "./db/seed";
 import { runCompanyDiscovery } from "./core/discoveryAgent";
+import { runDbCleanup } from "./db/cleanup";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -264,6 +265,19 @@ companiesCmd
       await registerDiscoveredCompany(name, careersUrl);
     } catch (err) {
       console.error("[CLI] Failed to register company:", err);
+    }
+    process.exit(0);
+  });
+
+program
+  .command("cleanup-db")
+  .description("Prune raw JSON bloat and old skipped jobs to free up Neon DB storage")
+  .action(async () => {
+    console.log("[CLI] Running DB Storage Cleanup...");
+    try {
+      await runDbCleanup();
+    } catch (err) {
+      console.error("[CLI] Cleanup error:", err);
     }
     process.exit(0);
   });
