@@ -1,0 +1,42 @@
+PRAKHAR PORWAL
++91-9415430525 | pporwal2019@gmail.com | LinkedIn | GitHub
+
+Professional Summary
+Recent Computer Science graduate with internship experience in AI/ML and software development. Strong communication, problem-solving, attention to detail, and ability to follow instructions and work in a team. Quick learner with an interest in AI, data, and content-related processes. Comfortable working in a structured, fast-paced environment and adapting to new tasks.
+
+Education
+Ajay Kumar Garg Engineering College | Ghaziabad, India
+Bachelor of Technology – Computer Science and Engineering | CGPA: 7.48 | June 2026
+
+Skills
+Communication: English, Hindi
+Core Skills: Problem Solving, Attention to Detail, Teamwork, Adaptability, Time Management, Quick Learning
+Technical Skills: Python, JavaScript, TypeScript, SQL, Git, MS Office / Google Workspace
+
+Professional Experience
+LLM Fine-tuning Intern | Feb 2026 – May 2026 | Remote
+Ethara AI
+– Worked with AI and customer-support datasets as part of an LLM fine-tuning project.
+– Performed data cleaning, organization, and review to maintain data quality and consistency.
+– Followed project guidelines and reviewed feedback to improve task accuracy and overall results.
+– Worked independently and collaborated with the team to complete assigned tasks within deadlines.
+
+Full Stack Developer Intern | Aug 2025 – Oct 2025 | Remote
+The Social Artist
+– Worked with a team on web applications and completed assigned tasks according to project requirements.
+– Identified issues, tested solutions, and helped improve the quality and performance of the application.
+– Communicated with team members and adapted to changing project requirements.
+
+Projects
+Vox – Anonymous Messaging Platform: Built a web-based messaging application with authentication, database integration, and a user-friendly interface.
+PizFlow – AI Website Analysis Tool: Building an AI-based tool that analyzes websites and identifies potential issues using structured workflows.
+
+Achievements
+• International Conference Publication: Co-authored research published at ICDPN-2025 (Springer).
+• Hackathon Finalist: Finalist among 50+ teams in an inter-college hackathon.
+• Solved 200+ problems on LeetCode, demonstrating problem-solving and analytical skills.
+
+Additional Information
+Availability: Immediate Joiner
+Work Preference: Work From Office
+Shift Flexibility: Comfortable with rotational shifts and flexible working hours

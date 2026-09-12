@@ -112,7 +112,7 @@ export async function matchJob(
 ): Promise<JobMatchResult> {
   checkApiKey();
   const prompt = `
-Compare the job description against the candidate's resume and perform an accurate match evaluation for an Entry Level / Early Career software developer (0-2 YOE).
+Compare the job description against the candidate's resume and perform an accurate match evaluation for an Entry Level / Early Career candidate (0-2 YOE) across SDE/Tech, Product/Design, and Operations/Analyst/Non-Voice positions.
 
 Candidate Resume Details:
 ${JSON.stringify(resume, null, 2)}
@@ -125,8 +125,9 @@ ${jobDescription}
 
 Important Evaluation Guidelines:
 1. Experience Level Strictness: If the job strictly requires Senior / Staff / Principal / Lead experience or 3+ years of mandatory post-grad experience, set score lower than 40 and applyRecommendation to "Skip".
-2. Salary Estimate: Provide salary estimates in INR (₹ Lakhs/yr or ₹ LPA, e.g., "₹12 - ₹18 Lakhs/yr"). If USD is listed in JD, convert at 1 USD = 85 INR.
-3. Resume Gaps / Missing Skills: Keep missingSkills and resumeGaps concise, direct, and actionable (e.g., "Lacks AWS production deployment & GraphQL experience").
+2. Match against candidate's relevant background: Evaluate tech skills for SDE roles, product sense/analytics/A-B testing for product roles, and communication/problem solving/data handling/adaptability for non-voice/operations/analyst roles.
+3. Salary Estimate: Provide salary estimates in INR (₹ Lakhs/yr or ₹ LPA, e.g., "₹6 - ₹12 Lakhs/yr"). If USD is listed in JD, convert at 1 USD = 85 INR.
+4. Resume Gaps / Missing Skills: Keep missingSkills and resumeGaps concise, direct, and actionable.
 `;
 
   try {

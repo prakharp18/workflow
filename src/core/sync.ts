@@ -106,7 +106,12 @@ export async function runJobSync() {
       "node.js developer", 
       "python developer", 
       "sde-1", 
-      "sde"
+      "sde",
+      "associate product manager",
+      "product analyst",
+      "data analyst",
+      "operations associate",
+      "process associate"
     ];
     const linkedInJobs = await crawlLinkedIn(linkedInKeywords, "India");
     allCrawledJobs.push(...linkedInJobs);

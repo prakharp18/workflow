@@ -1,0 +1,46 @@
+PRAKHAR PORWAL
++91-9415430525 | pporwal2019@gmail.com | LinkedIn | GitHub | LeetCode | Portfolio
+
+Professional Summary
+Builder with hands-on experience creating and improving production web products serving 10,000+ monthly users, reducing query times by 40%, and working with LLMs and customer-support data. Strong foundation in product development, data-driven problem solving, experimentation, and user-focused engineering, with experience across TypeScript, React.js, Next.js, Node.js, PostgreSQL, and AI workflows.
+
+Education
+Ajay Kumar Garg Engineering College | Ghaziabad, India
+Bachelor of Technology – Computer Science and Engineering | CGPA: 7.48 | June 2026
+
+Technical & Product Skills
+Languages: JavaScript (ES6+), TypeScript, Java
+Product & Data: Product Development, Data Analysis, Experimentation, User Journeys, A/B Testing, API Design
+Frontend: HTML5, CSS3, React.js, Next.js 15, Tailwind CSS, Redux
+Backend: Node.js, Express.js, REST APIs, Authentication (JWT, OAuth 2.0)
+Databases: PostgreSQL, MongoDB, Supabase
+Tools: Git, Docker, Jest, CI/CD, Agile, Figma, Lighthouse, axe-core, LangGraph, n8n
+
+Professional Experience
+LLM Fine-tuning Intern | Feb 2026 – May 2026 | Remote
+Ethara AI | Python, MultiMango, RLHF
+• Fine-tuned LLMs on customer-support datasets using Reinforcement Learning from Human Feedback (RLHF), reducing hallucinations across conversational use cases.
+• Built data pipelines for cleaning, deduplication, and prompt formatting; used reward-model feedback to iteratively improve accuracy on task-specific benchmarks.
+
+Full Stack Developer Intern | Aug 2025 – Oct 2025 | Remote
+The Social Artist | React, TypeScript, Node.js, PostgreSQL
+• Contributed to RESTful APIs for web applications serving 10,000+ monthly users; reduced PostgreSQL query time by 40% through B-tree indexing.
+• Led TypeScript migration across 50+ React components; used code-splitting and lazy loading to cut bundle size by 35% and improve TTI by 28%.
+
+Selected Projects
+PizFlow: AI Website Optimizer | Node.js, TypeScript, Playwright, LangGraph, Lighthouse, axe-core
+• Building an agentic AI product that analyzes real browser interactions to identify conversion bottlenecks and execute goal-driven user journeys.
+• Combining Playwright, Lighthouse, and axe-core to generate execution traces, journey success scores, and A/B testing recommendations for improving website conversion.
+
+Vox: Anonymous Messaging Platform | Next.js 15, TypeScript, MongoDB, NextAuth, Tailwind CSS | Live
+• Built and shipped a full-stack messaging product using Next.js 15 App Router and React Server Components, reducing client-side JS bundle size by 40% and achieving FCP below 1.2s.
+• Designed authentication and abuse-prevention flows using cryptographic OTP, NextAuth.js, and a Sliding Window Rate Limiter, with Zod-based validation at API boundaries.
+
+Graft: Natural-Language Task Automation | Node.js, TypeScript, Google Tasks API, OAuth 2.0, MCP, n8n | GitHub
+• Built a task-management product integrating Google Tasks API and OAuth 2.0 with NLP parsing; exposed 5 MCP tools for natural-language task management with sub-200ms response time.
+• Automated reminder workflows through n8n and MCP events, improving task completion rate by 60%.
+
+Achievements & Certifications
+• International Conference Publication: Co-authored research on "Hybrid AI-Based Tuberculosis Detection and Regional Environmental Correlation" at ICDPN-2025 (Springer, November 2025).
+• Hackathon Finalist: Finalist among 50+ teams for a smart grid cybersecurity solution built with Python and network monitoring tools.
+• LeetCode: Solved 200+ DSA problems.
