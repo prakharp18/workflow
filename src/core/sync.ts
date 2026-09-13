@@ -1,6 +1,6 @@
 import { db } from "../db/db";
 import { companies, jobs, jobMatches, resumeProfile, recruiters, eventsTimeline, historicalSnapshots } from "../db/schema";
-import { eq, isNull } from "drizzle-orm";
+import { eq, isNull, desc } from "drizzle-orm";
 import { crawlLinkedIn } from "../crawler/linkedin";
 import { crawlGlobalATS } from "../crawler/globalAtsCrawler";
 import { crawlRemoteOK, crawlYCJobs } from "../crawler/rssCrawlers";
@@ -61,8 +61,16 @@ export async function runJobSync() {
   
   const allCrawledJobs: any[] = [];
 
-  // 2. Crawl ATS platforms dynamically based on scheduling interval
+  // 2. Crawl ATS platforms dynamically based on scheduling interval (capped to 15 companies per run)
+  const MAX_COMPANIES_PER_RUN = 15;
+  let crawledCompaniesCount = 0;
+
   for (const comp of monitoredCompanies) {
+    if (crawledCompaniesCount >= MAX_COMPANIES_PER_RUN) {
+      console.log(`[Sync] Reached max company crawl budget (${MAX_COMPANIES_PER_RUN}) for this run. Moving to LinkedIn job stream...`);
+      break;
+    }
+
     const effectivePrio = calculateEffectivePriority(comp);
     const intervalMins = getCrawlIntervalMinutes(effectivePrio);
     
@@ -74,7 +82,6 @@ export async function runJobSync() {
     }
     
     if (!isDue) {
-      console.log(`[Sync] Skipping ${comp.name} (Effective Priority: ${effectivePrio}, last crawled ${Math.round((Date.now() - new Date(comp.lastCrawledAt!).getTime()) / 60000)} mins ago, interval is ${intervalMins} mins)`);
       continue;
     }
 
@@ -90,6 +97,7 @@ export async function runJobSync() {
       // Associate company ID
       crawled = crawled.map(j => ({ ...j, companyId: comp.id }));
       allCrawledJobs.push(...crawled);
+      crawledCompaniesCount++;
     } catch (err) {
       console.error(`[Sync] Error crawling company ${comp.name}:`, err);
     }
@@ -195,7 +203,7 @@ export async function runMatchEvaluation() {
     return;
   }
 
-  // Find jobs that don't have an entry in jobMatches
+  // Find jobs that don't have an entry in jobMatches (newest first)
   const unmatchedJobs = await db
     .select({
       id: jobs.id,
@@ -211,7 +219,8 @@ export async function runMatchEvaluation() {
     .from(jobs)
     .leftJoin(jobMatches, eq(jobs.id, jobMatches.jobId))
     .where(isNull(jobMatches.id))
-    .limit(20);
+    .orderBy(desc(jobs.id))
+    .limit(30);
 
   console.log(`[Evaluation] Evaluating ${unmatchedJobs.length} jobs against resume: ${(activeResume.parsedJson as any).name}`);
 

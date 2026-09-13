@@ -33,10 +33,11 @@ export async function crawlLinkedIn(keywords: string[], location: string = "Indi
     const page = await context.newPage();
     
     for (const keyword of keywords) {
-      const searchUrl = `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(keyword)}&location=${encodeURIComponent(location)}&f_TPR=r86400`; // Posted within last 24 hours
-      console.log(`[LinkedIn] Searching: ${searchUrl}`);
+      // sortBy=DD ensures strictly latest posted jobs, f_TPR=r86400 restricts to past 24 hours
+      const searchUrl = `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(keyword)}&location=${encodeURIComponent(location)}&sortBy=DD&f_TPR=r86400`;
+      console.log(`[LinkedIn] Searching latest jobs: ${searchUrl}`);
       
-      await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
+      await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
       
       // Wait for job cards
       try {
@@ -50,8 +51,8 @@ export async function crawlLinkedIn(keywords: string[], location: string = "Indi
       const cards = await page.$$(".job-search-card, .jobs-search__results-list li");
       console.log(`[LinkedIn] Found ${cards.length} cards for keyword "${keyword}"`);
 
-      // Limit to first 10 for test/rate limit safety
-      for (const card of cards.slice(0, 10)) {
+      // Maximize accurate crawl capacity: take up to 25 fresh cards per keyword
+      for (const card of cards.slice(0, 25)) {
         try {
           const titleEl = await card.$(".base-search-card__title, .job-card-list__title");
           const companyEl = await card.$(".base-search-card__subtitle, .job-card-container__company-name");
@@ -90,7 +91,7 @@ export async function crawlLinkedIn(keywords: string[], location: string = "Indi
     console.log(`[LinkedIn] Fetching details for ${jobsList.length} jobs...`);
     for (const job of jobsList) {
       try {
-        await page.goto(job.url, { waitUntil: "domcontentloaded", timeout: 30000 });
+        await page.goto(job.url, { waitUntil: "domcontentloaded", timeout: 15000 });
         
         // Try multiple selectors for description
         let desc = "";
@@ -99,6 +100,7 @@ export async function crawlLinkedIn(keywords: string[], location: string = "Indi
           ".jobs-description__content",
           ".job-view-layout-post-description",
           "article.jobs-description__container",
+          ".description__text",
         ];
         
         for (const selector of descSelectors) {
@@ -112,8 +114,8 @@ export async function crawlLinkedIn(keywords: string[], location: string = "Indi
         }
         
         job.description = desc || "No description available";
-        // Artificial delay to prevent block
-        await page.waitForTimeout(1000 + Math.random() * 1000);
+        // Polite delay to prevent IP blocking while staying fast
+        await page.waitForTimeout(400 + Math.random() * 400);
       } catch (jobErr) {
         console.error(`[LinkedIn] Error fetching details for ${job.url}:`, jobErr);
         job.description = "Fetch failed";

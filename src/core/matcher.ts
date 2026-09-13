@@ -24,6 +24,27 @@ const IGNORE_TITLE_KEYWORDS = [
   "engineering manager",
 ];
 
+const IGNORE_HIFI_COMPANIES = [
+  "stripe",
+  "google",
+  "microsoft",
+  "amazon",
+  "meta",
+  "apple",
+  "netflix",
+  "salesforce",
+  "uber",
+  "airbnb",
+  "adobe",
+  "oracle",
+  "cisco",
+  "intel",
+  "nvidia",
+  "goldman sachs",
+  "morgan stanley",
+  "jpmorgan",
+];
+
 const TARGET_TITLE_KEYWORDS = [
   "software engineer",
   "software developer",
@@ -71,8 +92,16 @@ const TARGET_TITLE_KEYWORDS = [
   "process executive",
 ];
 
-export function preFilterJob(title: string, description: string): { pass: boolean; reason?: string } {
+export function preFilterJob(title: string, description: string, companyName?: string): { pass: boolean; reason?: string } {
   const cleanTitle = title.toLowerCase();
+  const cleanCompany = (companyName || "").toLowerCase();
+
+  // Exclude hi-fi / big tech companies
+  for (const hifi of IGNORE_HIFI_COMPANIES) {
+    if (cleanCompany.includes(hifi)) {
+      return { pass: false, reason: `Excluded hi-fi / big tech company: ${hifi}` };
+    }
+  }
   
   // Check ignore keywords
   for (const keyword of IGNORE_TITLE_KEYWORDS) {
@@ -125,7 +154,7 @@ export async function evaluateJob(
   resume: ParsedResume
 ): Promise<{ matched: boolean; evaluation?: JobMatchResult; reason?: string }> {
   // 1. Run Pre-Filter
-  const filterResult = preFilterJob(jobTitle, jobDescription);
+  const filterResult = preFilterJob(jobTitle, jobDescription, companyName);
   if (!filterResult.pass) {
     return { matched: false, reason: filterResult.reason };
   }
