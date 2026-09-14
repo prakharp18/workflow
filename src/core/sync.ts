@@ -121,7 +121,17 @@ export async function runJobSync() {
       "operations associate",
       "process associate"
     ];
-    const linkedInJobs = await crawlLinkedIn(linkedInKeywords, "India");
+    // 60% North India (Noida, Gurugram, Delhi NCR) & 40% South India (Bangalore, Hyderabad, Pune)
+    const targetLocations = [
+      "Noida, Uttar Pradesh, India",
+      "Gurugram, Haryana, India",
+      "Delhi NCR, India",
+      "Bengaluru, Karnataka, India",
+      "Hyderabad, Telangana, India",
+      "Pune, Maharashtra, India"
+    ];
+
+    const linkedInJobs = await crawlLinkedIn(linkedInKeywords, targetLocations);
     allCrawledJobs.push(...linkedInJobs);
 
     // 3.5 Crawl Global ATS Boards for hidden startups
@@ -380,11 +390,29 @@ export async function runMatchEvaluation() {
         sizeMultiplier = 1.5; // boost small/mid size companies
       }
 
-      // India expansion/local hub boost
-      let indiaBoost = 1.0;
+      // Regional preference boost: 60% weight to Northern Region (Noida, Gurugram, Delhi NCR), 40% to South (Bangalore, Hyderabad, Pune)
+      let regionBoost = 1.0;
       const lowerLoc = (job.location || "").toLowerCase();
-      if (lowerLoc.includes("india") || lowerLoc.includes("bangalore") || lowerLoc.includes("hyderabad") || lowerLoc.includes("pune") || lowerLoc.includes("delhi") || lowerLoc.includes("gurgaon") || lowerLoc.includes("noida") || lowerLoc.includes("chennai")) {
-        indiaBoost = 1.5;
+      const isNorth = lowerLoc.includes("noida") || 
+                      lowerLoc.includes("gurgaon") || 
+                      lowerLoc.includes("gurugram") || 
+                      lowerLoc.includes("delhi") || 
+                      lowerLoc.includes("ncr") || 
+                      lowerLoc.includes("faridabad") || 
+                      lowerLoc.includes("ghaziabad");
+
+      const isSouth = lowerLoc.includes("bangalore") || 
+                      lowerLoc.includes("bengaluru") || 
+                      lowerLoc.includes("hyderabad") || 
+                      lowerLoc.includes("pune") || 
+                      lowerLoc.includes("chennai");
+
+      if (isNorth) {
+        regionBoost = 2.0; // Primary 60% priority target
+      } else if (isSouth) {
+        regionBoost = 1.4; // 40% secondary hub
+      } else if (lowerLoc.includes("india") || lowerLoc.includes("remote")) {
+        regionBoost = 1.2;
       }
 
       // Calculate priority score using formula
@@ -397,7 +425,7 @@ export async function runMatchEvaluation() {
         (companyPriority / 5) *
         competitionMultiplier *
         sizeMultiplier *
-        indiaBoost
+        regionBoost
       );
       const priorityScore = Math.max(0, Math.min(100, calculatedPrio));
 

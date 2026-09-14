@@ -4,8 +4,9 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-export async function crawlLinkedIn(keywords: string[], location: string = "India"): Promise<CrawlerJob[]> {
-  console.log(`[LinkedIn] Crawling jobs for keywords: [${keywords.join(", ")}] in ${location}...`);
+export async function crawlLinkedIn(keywords: string[], locations: string | string[] = "India"): Promise<CrawlerJob[]> {
+  const locList = Array.isArray(locations) ? locations : [locations];
+  console.log(`[LinkedIn] Crawling jobs for keywords: [${keywords.join(", ")}] across locations: [${locList.join(", ")}]...`);
   
   const browser = await chromium.launch({
     headless: true,
@@ -32,32 +33,33 @@ export async function crawlLinkedIn(keywords: string[], location: string = "Indi
   try {
     const page = await context.newPage();
     
-    for (const keyword of keywords) {
-      // sortBy=DD ensures strictly latest posted jobs, f_TPR=r86400 restricts to past 24 hours
-      const searchUrl = `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(keyword)}&location=${encodeURIComponent(location)}&sortBy=DD&f_TPR=r86400`;
-      console.log(`[LinkedIn] Searching latest jobs: ${searchUrl}`);
-      
-      await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
-      
-      // Wait for job cards
-      try {
-        await page.waitForSelector(".job-search-card, .jobs-search__results-list li", { timeout: 10000 });
-      } catch (e) {
-        console.log(`[LinkedIn] No jobs found or selector not visible for keyword "${keyword}"`);
-        continue;
-      }
-
-      // Extract card elements
-      const cards = await page.$$(".job-search-card, .jobs-search__results-list li");
-      console.log(`[LinkedIn] Found ${cards.length} cards for keyword "${keyword}"`);
-
-      // Maximize accurate crawl capacity: take up to 25 fresh cards per keyword
-      for (const card of cards.slice(0, 25)) {
+    for (const loc of locList) {
+      for (const keyword of keywords) {
+        // sortBy=DD ensures strictly latest posted jobs, f_TPR=r86400 restricts to past 24 hours
+        const searchUrl = `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(keyword)}&location=${encodeURIComponent(loc)}&sortBy=DD&f_TPR=r86400`;
+        console.log(`[LinkedIn] Searching latest jobs: ${searchUrl}`);
+        
+        await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+        
+        // Wait for job cards
         try {
-          const titleEl = await card.$(".base-search-card__title, .job-card-list__title");
-          const companyEl = await card.$(".base-search-card__subtitle, .job-card-container__company-name");
-          const linkEl = await card.$("a.base-card__full-link, a.job-card-list__title");
-          const locationEl = await card.$(".job-search-card__metadata, .job-card-container__metadata-item");
+          await page.waitForSelector(".job-search-card, .jobs-search__results-list li", { timeout: 10000 });
+        } catch (e) {
+          console.log(`[LinkedIn] No jobs found or selector not visible for keyword "${keyword}" in ${loc}`);
+          continue;
+        }
+
+        // Extract card elements
+        const cards = await page.$$(".job-search-card, .jobs-search__results-list li");
+        console.log(`[LinkedIn] Found ${cards.length} cards for keyword "${keyword}" in ${loc}`);
+
+        // Maximize accurate crawl capacity: take up to 25 fresh cards per keyword
+        for (const card of cards.slice(0, 25)) {
+          try {
+            const titleEl = await card.$(".base-search-card__title, .job-card-list__title");
+            const companyEl = await card.$(".base-search-card__subtitle, .job-card-container__company-name");
+            const linkEl = await card.$("a.base-card__full-link, a.job-card-list__title");
+            const locationEl = await card.$(".job-search-card__metadata, .job-card-container__metadata-item");
 
           if (titleEl && companyEl && linkEl) {
             const title = (await titleEl.innerText()).trim();
@@ -86,6 +88,7 @@ export async function crawlLinkedIn(keywords: string[], location: string = "Indi
         }
       }
     }
+  }
 
     // Now navigate to each job to get full description
     console.log(`[LinkedIn] Fetching details for ${jobsList.length} jobs...`);
