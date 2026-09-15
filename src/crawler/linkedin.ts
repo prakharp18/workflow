@@ -134,3 +134,94 @@ export async function crawlLinkedIn(keywords: string[], locations: string | stri
   // Filter out any jobs where we failed to scrape descriptions
   return jobsList.filter(job => job.description && job.description !== "Fetch failed");
 }
+
+export async function crawlLinkedInPosts(keywords: string[], locations: string | string[] = "India"): Promise<CrawlerJob[]> {
+  const locList = Array.isArray(locations) ? locations : [locations];
+  console.log(`[LinkedIn] Crawling POSTS for keywords: [${keywords.join(", ")}] across locations: [${locList.join(", ")}]...`);
+  
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  });
+
+  if (process.env.LINKEDIN_COOKIE) {
+    await context.addCookies([{ name: "li_at", value: process.env.LINKEDIN_COOKIE, domain: ".linkedin.com", path: "/" }]);
+  } else {
+    console.log("[LinkedIn] Warning: Crawling posts generally requires authentication (LINKEDIN_COOKIE).");
+  }
+
+  const postsList: CrawlerJob[] = [];
+  try {
+    const page = await context.newPage();
+    for (const loc of locList) {
+      for (const keyword of keywords) {
+        // Construct search query for posts
+        const searchQuery = `${keyword} ${loc}`;
+        // datePosted="past-24h"
+        const searchUrl = `https://www.linkedin.com/search/results/content/?keywords=${encodeURIComponent(searchQuery)}&datePosted=%22past-24h%22&sortBy=%22date_posted%22`;
+        console.log(`[LinkedIn] Searching latest posts: ${searchUrl}`);
+        
+        await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+        
+        try {
+          await page.waitForSelector(".search-results-container, .feed-shared-update-v2", { timeout: 10000 });
+        } catch (e) {
+          console.log(`[LinkedIn] No posts found or selector not visible for keyword "${keyword}" in ${loc}`);
+          continue;
+        }
+
+        await page.waitForTimeout(2000); // Allow feed to render
+
+        const posts = await page.$$(".feed-shared-update-v2, .search-results-container ul > li");
+        console.log(`[LinkedIn] Found ${posts.length} posts for keyword "${keyword}" in ${loc}`);
+
+        for (const post of posts.slice(0, 15)) {
+          try {
+            const authorEl = await post.$(".update-components-actor__name, .app-aware-link span[dir='ltr']");
+            const textEl = await post.$(".update-components-text, .feed-shared-update-v2__description");
+            const linkEl = await post.$(".update-components-actor__meta-link, a.app-aware-link");
+
+            let author = "Unknown Member";
+            if (authorEl) author = (await authorEl.innerText()).trim();
+
+            let text = "";
+            if (textEl) text = (await textEl.innerText()).trim();
+
+            let url = searchUrl; // Fallback
+            if (linkEl) {
+              const href = await linkEl.getAttribute("href");
+              if (href) {
+                try {
+                  const urlObj = new URL(href, "https://www.linkedin.com");
+                  url = `${urlObj.origin}${urlObj.pathname}`;
+                } catch (e) {
+                  url = href;
+                }
+              }
+            }
+
+            // Only add if there is meaningful text
+            if (text) {
+              postsList.push({
+                title: `Walk-in Post by ${author.split("\\n")[0]}`,
+                companyName: author.split("\\n")[0],
+                url,
+                description: text,
+                location: loc,
+                postedAt: new Date(),
+              });
+            }
+          } catch (postErr) {
+            console.error("[LinkedIn] Error parsing post:", postErr);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error("[LinkedIn] Main post crawl error:", error);
+  } finally {
+    await browser.close();
+  }
+
+  return postsList;
+}

@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const schedule = process.env.CRON_SCHEDULE || "0 */2 * * *"; // Default every 2 hours
+const schedule = process.env.CRON_SCHEDULE || "0 * * * *"; // Default every hour
 
 export function startBackgroundWorker() {
   console.log(`[Worker] Starting background scheduler with schedule: "${schedule}"`);

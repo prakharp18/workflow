@@ -1,7 +1,7 @@
 import { db } from "../db/db";
 import { companies, jobs, jobMatches, resumeProfile, recruiters, eventsTimeline, historicalSnapshots } from "../db/schema";
 import { eq, isNull, desc } from "drizzle-orm";
-import { crawlLinkedIn } from "../crawler/linkedin";
+import { crawlLinkedIn, crawlLinkedInPosts } from "../crawler/linkedin";
 import { crawlGlobalATS } from "../crawler/globalAtsCrawler";
 import { crawlRemoteOK, crawlYCJobs } from "../crawler/rssCrawlers";
 import { getCrawler } from "../crawler/crawlerRegistry";
@@ -119,13 +119,22 @@ export async function runJobSync() {
       "product analyst",
       "data analyst",
       "operations associate",
-      "process associate"
+      "process associate",
+      "fresher",
+      "administrator L0",
+      "desk consultant",
+      "consultant L0",
+      "non-technical",
+      "non-voice",
+      "walk-in",
+      "mega walk-in"
     ];
-    // 60% North India (Noida, Gurugram, Delhi NCR) & 40% South India (Bangalore, Hyderabad, Pune)
+    // Focus mainly on North India (Noida, Gurugram, Delhi NCR, Agra) but include South for 70/30 split
     const targetLocations = [
       "Noida, Uttar Pradesh, India",
       "Gurugram, Haryana, India",
       "Delhi NCR, India",
+      "Agra, Uttar Pradesh, India",
       "Bengaluru, Karnataka, India",
       "Hyderabad, Telangana, India",
       "Pune, Maharashtra, India"
@@ -133,6 +142,11 @@ export async function runJobSync() {
 
     const linkedInJobs = await crawlLinkedIn(linkedInKeywords, targetLocations);
     allCrawledJobs.push(...linkedInJobs);
+
+    // Also crawl LinkedIn posts for walk-in drives
+    const postKeywords = ["walk-in", "mega walk-in", "walkin"];
+    const linkedInPosts = await crawlLinkedInPosts(postKeywords, targetLocations);
+    allCrawledJobs.push(...linkedInPosts);
 
     // 3.5 Crawl Global ATS Boards for hidden startups
     const globalAtsJobs = await crawlGlobalATS(linkedInKeywords, "India");
@@ -254,17 +268,23 @@ export async function runMatchEvaluation() {
 
     // Pre-filter: Focus on India / local & remote opportunities for freshers
     const lowerLoc = (job.location || "").toLowerCase();
-    const isIndiaJob = lowerLoc.includes("india") || 
-                       lowerLoc.includes("bangalore") || 
-                       lowerLoc.includes("bengaluru") ||
-                       lowerLoc.includes("hyderabad") || 
-                       lowerLoc.includes("pune") || 
-                       lowerLoc.includes("delhi") || 
-                       lowerLoc.includes("gurgaon") || 
-                       lowerLoc.includes("gurugram") ||
-                       lowerLoc.includes("noida") || 
+    const isNorth = lowerLoc.includes("noida") || 
+                    lowerLoc.includes("gurgaon") || 
+                    lowerLoc.includes("gurugram") || 
+                    lowerLoc.includes("delhi") || 
+                    lowerLoc.includes("ncr") || 
+                    lowerLoc.includes("faridabad") || 
+                    lowerLoc.includes("ghaziabad") ||
+                    lowerLoc.includes("agra");
+
+    const isSouth = lowerLoc.includes("bangalore") || 
+                    lowerLoc.includes("bengaluru") || 
+                    lowerLoc.includes("hyderabad") || 
+                    lowerLoc.includes("pune") || 
+                    lowerLoc.includes("chennai");
+
+    const isIndiaJob = lowerLoc.includes("india") || isNorth || isSouth ||
                        lowerLoc.includes("mumbai") || 
-                       lowerLoc.includes("chennai") ||
                        lowerLoc.includes("remote");
 
     if (!isIndiaJob && !isIndiaCompany) {
@@ -275,6 +295,33 @@ export async function runMatchEvaluation() {
         whyMatched: "Skipped: outside India focus region",
         applyRecommendation: "Skip",
         priorityScore: 0,
+      });
+      continue;
+    }
+
+    const titleLower = job.title.toLowerCase();
+    const descLower = (job.description || "").toLowerCase();
+    const isWalkIn = titleLower.includes("walk-in") || titleLower.includes("walk in") || titleLower.includes("walkin") || titleLower.includes("mega walk") ||
+                     descLower.includes("walk-in") || descLower.includes("walk in") || descLower.includes("walkin") || descLower.includes("mega walk");
+
+    if (isWalkIn && isNorth) {
+      console.log(`[Evaluation] MEGA WALK-IN DETECTED in North India! Sending immediate alert.`);
+      if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
+        const telegramMessage = 
+          `<b>[WALK-IN DRIVE]</b>\n` +
+          `<b>Company:</b> ${companyName}\n` +
+          `<b>Role:</b> ${job.title}\n` +
+          `<b>Location:</b> ${job.location || "North India"}\n` +
+          `\n<a href="${job.url}">View Post</a>`;
+        await sendTelegramAlert(telegramMessage);
+      }
+      await db.insert(jobMatches).values({
+        jobId: job.id,
+        score: 100,
+        whyMatched: "Auto-matched: Walk-in drive in preferred location",
+        applyRecommendation: "Attend Walk-in",
+        priorityScore: 100,
+        outreach: null,
       });
       continue;
     }
@@ -384,33 +431,31 @@ export async function runMatchEvaluation() {
 
       // Large company penalty vs Small startup boost
       let sizeMultiplier = 1.0;
-      if (isBigCompany) {
+      const lowerCompName = companyName.toLowerCase();
+      const isTargetBigCompany = lowerCompName.includes("accenture") || 
+                                 lowerCompName.includes("wipro") || 
+                                 lowerCompName.includes("infosys") || 
+                                 lowerCompName.includes("tcs") || 
+                                 lowerCompName.includes("deloitte") || 
+                                 lowerCompName.includes("capgemini") || 
+                                 lowerCompName.includes("cognizant") || 
+                                 lowerCompName.includes("tech mahindra");
+
+      if (isTargetBigCompany) {
+        sizeMultiplier = 1.5; // Boost specifically targeted big companies
+      } else if (isBigCompany) {
         sizeMultiplier = 0.2; // penalty for global giants for fresher matching
       } else {
         sizeMultiplier = 1.5; // boost small/mid size companies
       }
 
-      // Regional preference boost: 60% weight to Northern Region (Noida, Gurugram, Delhi NCR), 40% to South (Bangalore, Hyderabad, Pune)
+      // Regional preference boost: 70% North / 30% South split
       let regionBoost = 1.0;
-      const lowerLoc = (job.location || "").toLowerCase();
-      const isNorth = lowerLoc.includes("noida") || 
-                      lowerLoc.includes("gurgaon") || 
-                      lowerLoc.includes("gurugram") || 
-                      lowerLoc.includes("delhi") || 
-                      lowerLoc.includes("ncr") || 
-                      lowerLoc.includes("faridabad") || 
-                      lowerLoc.includes("ghaziabad");
-
-      const isSouth = lowerLoc.includes("bangalore") || 
-                      lowerLoc.includes("bengaluru") || 
-                      lowerLoc.includes("hyderabad") || 
-                      lowerLoc.includes("pune") || 
-                      lowerLoc.includes("chennai");
-
+      
       if (isNorth) {
-        regionBoost = 2.0; // Primary 60% priority target
+        regionBoost = 1.7; // ~70% preference
       } else if (isSouth) {
-        regionBoost = 1.4; // 40% secondary hub
+        regionBoost = 0.7; // ~30% preference
       } else if (lowerLoc.includes("india") || lowerLoc.includes("remote")) {
         regionBoost = 1.2;
       }
@@ -479,17 +524,12 @@ export async function runMatchEvaluation() {
         console.log("[Notification] Forwarding match alert to Telegram...");
         
         const inrSalary = formatSalaryToINR(salaryEstimate || job.salary);
-        const missingList = (missingSkills as string[] || []);
-        const missingFormatted = missingList.length > 0 ? missingList.join(", ") : "None";
-        const gapInfo = resumeGaps || missingFormatted;
-
         const telegramMessage = 
           `<b>Company:</b> ${companyName}\n` +
           `<b>Role:</b> ${job.title}\n` +
           `<b>Location:</b> ${job.location || "Remote"}\n` +
-          `<b>Salary:</b> ${inrSalary}\n\n` +
-          `<b>Requirements / Skill Gaps:</b>\n${gapInfo}\n\n` +
-          `<a href="${job.url}">Apply Link</a>`;
+          (inrSalary !== "Not Disclosed" ? `<b>Salary:</b> ${inrSalary}\n` : "") +
+          `\n<a href="${job.url}">Apply Here</a>`;
         
         await sendTelegramAlert(telegramMessage);
       }
