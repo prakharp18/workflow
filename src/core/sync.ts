@@ -62,8 +62,8 @@ export async function runJobSync() {
   
   const allCrawledJobs: any[] = [];
 
-  // 2. Crawl ATS platforms dynamically based on scheduling interval (capped to 15 companies per run)
-  const MAX_COMPANIES_PER_RUN = 15;
+  // 2. Crawl ATS platforms dynamically based on scheduling interval (capped to 5 companies per run)
+  const MAX_COMPANIES_PER_RUN = 0;
   let crawledCompaniesCount = 0;
 
   for (const comp of monitoredCompanies) {
@@ -108,12 +108,9 @@ export async function runJobSync() {
   console.log("[Sync] Phase D: Running all external crawlers in PARALLEL...");
   const parallelStart = Date.now();
 
-  const [linkedInResult, postsResult, globalAtsResult, remoteOkResult, ycResult] = await Promise.allSettled([
+  const [linkedInResult, postsResult] = await Promise.allSettled([
     crawlLinkedIn(),
     crawlLinkedInPosts(),
-    crawlGlobalATS(),
-    crawlRemoteOK(),
-    crawlYCJobs(),
   ]);
 
   // Collect results from settled promises
@@ -129,23 +126,7 @@ export async function runJobSync() {
     console.error("[Sync] LinkedIn posts crawl failed:", postsResult.reason);
   }
 
-  if (globalAtsResult.status === "fulfilled") {
-    allCrawledJobs.push(...globalAtsResult.value);
-  } else {
-    console.error("[Sync] Global ATS crawl failed:", globalAtsResult.reason);
-  }
-
-  if (remoteOkResult.status === "fulfilled") {
-    allCrawledJobs.push(...remoteOkResult.value);
-  } else {
-    console.error("[Sync] RemoteOK crawl failed:", remoteOkResult.reason);
-  }
-
-  if (ycResult.status === "fulfilled") {
-    allCrawledJobs.push(...ycResult.value);
-  } else {
-    console.error("[Sync] YC Jobs crawl failed:", ycResult.reason);
-  }
+  // Removed globalAtsResult, remoteOkResult, ycResult handling
 
   const parallelElapsed = ((Date.now() - parallelStart) / 1000).toFixed(1);
   console.log(`[Sync] Parallel crawl phase completed in ${parallelElapsed}s. Total: ${allCrawledJobs.length} jobs.`);

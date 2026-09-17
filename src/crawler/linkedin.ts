@@ -13,11 +13,11 @@ const LINKEDIN_KEYWORD_GROUPS = [
   '"fresher" OR "walk-in" OR "mega walk-in"',
 ];
 
-// Reduced locations — LinkedIn geo-search covers surrounding cities
+// Locations restricted strictly to Northern India as requested
 const LINKEDIN_LOCATIONS = [
-  "India",
-  "Delhi NCR, India",
-  "Bengaluru, Karnataka, India",
+  "Delhi NCR",
+  "Noida",
+  "Gurugram",
 ];
 
 export async function crawlLinkedIn(keywords?: string[], locations?: string | string[]): Promise<CrawlerJob[]> {
@@ -174,7 +174,7 @@ export async function crawlLinkedIn(keywords?: string[], locations?: string | st
 export async function crawlLinkedInPosts(keywords?: string[], locations?: string | string[]): Promise<CrawlerJob[]> {
   // Optimized: 3 keywords × 1 broad location = 3 page loads (down from 21)
   const postKeywords = ["walk-in drive", "mega walk-in hiring", "walkin fresher"];
-  const locList = ["India"];
+  const locList = ["Delhi NCR", "Noida", "Gurugram"];
 
   console.log(`[LinkedIn] Crawling POSTS: ${postKeywords.length} keywords × ${locList.length} locations = ${postKeywords.length * locList.length} searches (optimized from 21)...`);
   
