@@ -1,6 +1,6 @@
 import { db } from "../db/db";
 import { companies, jobs, jobMatches, resumeProfile, recruiters, eventsTimeline, historicalSnapshots } from "../db/schema";
-import { eq, isNull, desc } from "drizzle-orm";
+import { eq, isNull, desc, inArray } from "drizzle-orm";
 import { crawlLinkedIn, crawlLinkedInPosts } from "../crawler/linkedin";
 import { crawlGlobalATS } from "../crawler/globalAtsCrawler";
 import { crawlRemoteOK, crawlYCJobs } from "../crawler/rssCrawlers";
@@ -13,6 +13,7 @@ import * as path from "path";
 import { runCompanyDiscovery } from "./discoveryAgent";
 
 export async function runJobSync() {
+  const syncStart = Date.now();
   console.log("[Sync] Starting global A-to-Z jobs synchronization...");
 
   // 1. Run Company Discovery first (Phase A)
@@ -67,7 +68,7 @@ export async function runJobSync() {
 
   for (const comp of monitoredCompanies) {
     if (crawledCompaniesCount >= MAX_COMPANIES_PER_RUN) {
-      console.log(`[Sync] Reached max company crawl budget (${MAX_COMPANIES_PER_RUN}) for this run. Moving to LinkedIn job stream...`);
+      console.log(`[Sync] Reached max company crawl budget (${MAX_COMPANIES_PER_RUN}) for this run. Moving to parallel crawl phase...`);
       break;
     }
 
@@ -103,108 +104,99 @@ export async function runJobSync() {
     }
   }
 
-  // 3. Crawl LinkedIn for target developer & engineering roles
-  try {
-    const linkedInKeywords = [
-      "software engineer", 
-      "frontend developer", 
-      "backend developer", 
-      "full stack developer", 
-      "react developer", 
-      "node.js developer", 
-      "python developer", 
-      "sde-1", 
-      "sde",
-      "associate product manager",
-      "product analyst",
-      "data analyst",
-      "operations associate",
-      "process associate",
-      "fresher",
-      "administrator L0",
-      "desk consultant",
-      "consultant L0",
-      "non-technical",
-      "non-voice",
-      "walk-in",
-      "mega walk-in"
-    ];
-    // Focus mainly on North India (Noida, Gurugram, Delhi NCR, Agra) but include South for 70/30 split
-    const targetLocations = [
-      "Noida, Uttar Pradesh, India",
-      "Gurugram, Haryana, India",
-      "Delhi NCR, India",
-      "Agra, Uttar Pradesh, India",
-      "Bengaluru, Karnataka, India",
-      "Hyderabad, Telangana, India",
-      "Pune, Maharashtra, India"
-    ];
+  // 3. PARALLEL CRAWL — Run LinkedIn, Posts, Global ATS, RemoteOK, YC all concurrently
+  console.log("[Sync] Phase D: Running all external crawlers in PARALLEL...");
+  const parallelStart = Date.now();
 
-    const linkedInJobs = await crawlLinkedIn(linkedInKeywords, targetLocations);
-    allCrawledJobs.push(...linkedInJobs);
+  const [linkedInResult, postsResult, globalAtsResult, remoteOkResult, ycResult] = await Promise.allSettled([
+    crawlLinkedIn(),
+    crawlLinkedInPosts(),
+    crawlGlobalATS(),
+    crawlRemoteOK(),
+    crawlYCJobs(),
+  ]);
 
-    // Also crawl LinkedIn posts for walk-in drives
-    const postKeywords = ["walk-in", "mega walk-in", "walkin"];
-    const linkedInPosts = await crawlLinkedInPosts(postKeywords, targetLocations);
-    allCrawledJobs.push(...linkedInPosts);
-
-    // 3.5 Crawl Global ATS Boards for hidden startups
-    const globalAtsJobs = await crawlGlobalATS(linkedInKeywords, "India");
-    allCrawledJobs.push(...globalAtsJobs);
-  } catch (err) {
-    console.error("[Sync] LinkedIn/Global ATS crawl failed:", err);
+  // Collect results from settled promises
+  if (linkedInResult.status === "fulfilled") {
+    allCrawledJobs.push(...linkedInResult.value);
+  } else {
+    console.error("[Sync] LinkedIn crawl failed:", linkedInResult.reason);
   }
 
-  // 4. Crawl RemoteOK
-  try {
-    const remoteOkJobs = await crawlRemoteOK();
-    allCrawledJobs.push(...remoteOkJobs);
-  } catch (err) {
-    console.error("[Sync] RemoteOK crawl failed:", err);
+  if (postsResult.status === "fulfilled") {
+    allCrawledJobs.push(...postsResult.value);
+  } else {
+    console.error("[Sync] LinkedIn posts crawl failed:", postsResult.reason);
   }
 
-  // 5. Crawl YC Jobs RSS
-  try {
-    const ycJobs = await crawlYCJobs();
-    allCrawledJobs.push(...ycJobs);
-  } catch (err) {
-    console.error("[Sync] YC Jobs crawl failed:", err);
+  if (globalAtsResult.status === "fulfilled") {
+    allCrawledJobs.push(...globalAtsResult.value);
+  } else {
+    console.error("[Sync] Global ATS crawl failed:", globalAtsResult.reason);
   }
 
-  console.log(`[Sync] Crawled a total of ${allCrawledJobs.length} jobs. Saving new ones to DB...`);
+  if (remoteOkResult.status === "fulfilled") {
+    allCrawledJobs.push(...remoteOkResult.value);
+  } else {
+    console.error("[Sync] RemoteOK crawl failed:", remoteOkResult.reason);
+  }
+
+  if (ycResult.status === "fulfilled") {
+    allCrawledJobs.push(...ycResult.value);
+  } else {
+    console.error("[Sync] YC Jobs crawl failed:", ycResult.reason);
+  }
+
+  const parallelElapsed = ((Date.now() - parallelStart) / 1000).toFixed(1);
+  console.log(`[Sync] Parallel crawl phase completed in ${parallelElapsed}s. Total: ${allCrawledJobs.length} jobs.`);
   
   let newJobsCount = 0;
 
-  // 4. Save to Database (Deduplicating using URL hash)
-  for (const jobData of allCrawledJobs) {
-    const hash = crypto.createHash("md5").update(jobData.url).digest("hex");
-    
-    // Check duplicate (select only id to minimize Neon data transfer)
-    const existing = await db
-      .select({ id: jobs.id })
-      .from(jobs)
-      .where(eq(jobs.hash, hash))
-      .limit(1);
+  // 4. BATCH DEDUP — Fetch all existing hashes in one query instead of N queries
+  const allHashes = allCrawledJobs.map(j => 
+    crypto.createHash("md5").update(j.url).digest("hex")
+  );
 
-    if (existing.length === 0) {
-      if (!jobData.title) continue;
-      try {
-        await db.insert(jobs).values({
-          companyId: jobData.companyId || null,
-          title: jobData.title,
-          url: jobData.url,
-          description: jobData.description,
-          location: jobData.location || "Remote",
-          salary: jobData.salary || null,
-          hash,
-          postedAt: jobData.postedAt ? new Date(jobData.postedAt).toISOString() : new Date().toISOString(),
-          rawJson: jobData.rawJson || null,
-          applicantCount: jobData.applicantCount || null,
-        });
-        newJobsCount++;
-      } catch (err) {
-        console.error(`[Sync] Failed to save job "${jobData.title}":`, err);
-      }
+  // Batch fetch in chunks of 500 to avoid SQL parameter limits
+  const existingHashSet = new Set<string>();
+  const HASH_BATCH_SIZE = 500;
+  for (let i = 0; i < allHashes.length; i += HASH_BATCH_SIZE) {
+    const batch = allHashes.slice(i, i + HASH_BATCH_SIZE);
+    const existingBatch = await db
+      .select({ hash: jobs.hash })
+      .from(jobs)
+      .where(inArray(jobs.hash, batch));
+    for (const row of existingBatch) {
+      if (row.hash) existingHashSet.add(row.hash);
+    }
+  }
+
+  console.log(`[Sync] Batch dedup: ${existingHashSet.size} existing hashes found. Inserting new jobs...`);
+
+  for (let idx = 0; idx < allCrawledJobs.length; idx++) {
+    const jobData = allCrawledJobs[idx];
+    const hash = allHashes[idx];
+    
+    if (existingHashSet.has(hash)) continue;
+    if (!jobData.title) continue;
+
+    try {
+      await db.insert(jobs).values({
+        companyId: jobData.companyId || null,
+        title: jobData.title,
+        url: jobData.url,
+        description: jobData.description,
+        location: jobData.location || "Remote",
+        salary: jobData.salary || null,
+        hash,
+        postedAt: jobData.postedAt ? new Date(jobData.postedAt).toISOString() : new Date().toISOString(),
+        rawJson: jobData.rawJson || null,
+        applicantCount: jobData.applicantCount || null,
+      });
+      existingHashSet.add(hash); // Prevent duplicates within same batch
+      newJobsCount++;
+    } catch (err) {
+      console.error(`[Sync] Failed to save job "${jobData.title}":`, err);
     }
   }
 
@@ -212,6 +204,9 @@ export async function runJobSync() {
   
   // 5. Automatically evaluate new/unmatched jobs against active resume
   await runMatchEvaluation();
+
+  const totalElapsed = ((Date.now() - syncStart) / 1000 / 60).toFixed(1);
+  console.log(`[Sync] ✅ Full sync completed in ${totalElapsed} minutes.`);
 }
 
 export async function runMatchEvaluation() {
@@ -248,20 +243,30 @@ export async function runMatchEvaluation() {
 
   console.log(`[Evaluation] Evaluating ${unmatchedJobs.length} jobs against resume: ${(activeResume.parsedJson as any).name}`);
 
+  // PRE-LOAD: Build company cache to avoid N+1 queries (was querying same company 3x per job)
+  const companyIds = [...new Set(unmatchedJobs.map(j => j.companyId).filter(Boolean))] as number[];
+  const companyCache = new Map<number, any>();
+  if (companyIds.length > 0) {
+    const companyRows = await db.query.companies.findMany({
+      where: inArray(companies.id, companyIds),
+    });
+    for (const c of companyRows) {
+      companyCache.set(c.id, c);
+    }
+  }
+
   for (const job of unmatchedJobs) {
     let companyName = "Unknown Company";
     let isIndiaCompany = false;
     let companyCountry = "India";
-    if (job.companyId) {
-      const comp = await db.query.companies.findFirst({
-        where: eq(companies.id, job.companyId),
-      });
-      if (comp) {
-        companyName = comp.name;
-        companyCountry = comp.country || "India";
-        isIndiaCompany = companyCountry.toLowerCase() === "india";
-      }
-    } else {
+    
+    // Use cache instead of individual DB query
+    if (job.companyId && companyCache.has(job.companyId)) {
+      const comp = companyCache.get(job.companyId);
+      companyName = comp.name;
+      companyCountry = comp.country || "India";
+      isIndiaCompany = companyCountry.toLowerCase() === "india";
+    } else if (!job.companyId) {
       const urlObj = new URL(job.url);
       companyName = urlObj.hostname.replace("www.", "").split(".")[0];
     }
@@ -327,7 +332,7 @@ export async function runMatchEvaluation() {
     }
 
     // Rate limit throttle for Gemini Free Tier (15 RPM)
-    await new Promise(resolve => setTimeout(resolve, 4500));
+    await new Promise(resolve => setTimeout(resolve, 4000));
 
     console.log(`[Evaluation] Evaluating "${job.title}" at "${companyName}"...`);
     const evalResult = await evaluateJob(
@@ -355,20 +360,28 @@ export async function runMatchEvaluation() {
         continue;
       }
       
+      // Use cached company data instead of repeated DB queries
       let companyHealth = 60;
       let hiringMomentum = 50;
       let companyPriority = 5;
       let atsType = "unknown";
+      let companySize = "unknown";
+      let isBigCompany = false;
       
-      if (job.companyId) {
-        const comp = await db.query.companies.findFirst({
-          where: eq(companies.id, job.companyId),
-        });
-        if (comp) {
-          companyHealth = comp.healthScore || 60;
-          hiringMomentum = comp.hiringMomentum || 50;
-          companyPriority = comp.priority || 5;
-          atsType = comp.atsType || "unknown";
+      if (job.companyId && companyCache.has(job.companyId)) {
+        const comp = companyCache.get(job.companyId);
+        companyHealth = comp.healthScore || 60;
+        hiringMomentum = comp.hiringMomentum || 50;
+        companyPriority = comp.priority || 5;
+        atsType = comp.atsType || "unknown";
+        companySize = comp.companySize || "unknown";
+        if (companySize === "5000+" || comp.name.toLowerCase().includes("stripe") || comp.name.toLowerCase().includes("google") || comp.name.toLowerCase().includes("microsoft") || comp.name.toLowerCase().includes("amazon") || comp.name.toLowerCase().includes("meta") || comp.name.toLowerCase().includes("apple")) {
+          isBigCompany = true;
+        }
+      } else {
+        const lowerName = companyName.toLowerCase();
+        if (lowerName.includes("stripe") || lowerName.includes("google") || lowerName.includes("microsoft") || lowerName.includes("amazon") || lowerName.includes("meta") || lowerName.includes("apple") || lowerName.includes("netflix")) {
+          isBigCompany = true;
         }
       }
 
@@ -404,30 +417,6 @@ export async function runMatchEvaluation() {
       else if (appCount < 150) competitionMultiplier = 1.1;
       else if (appCount < 500) competitionMultiplier = 0.9;
       else competitionMultiplier = 0.7;
-
-      // Check if giant company
-      let isBigCompany = false;
-      let companySize = "unknown";
-      if (job.companyId) {
-        const comp = await db.query.companies.findFirst({
-          where: eq(companies.id, job.companyId),
-        });
-        if (comp) {
-          companyHealth = comp.healthScore || 60;
-          hiringMomentum = comp.hiringMomentum || 50;
-          companyPriority = comp.priority || 5;
-          atsType = comp.atsType || "unknown";
-          companySize = comp.companySize || "unknown";
-          if (companySize === "5000+" || comp.name.toLowerCase().includes("stripe") || comp.name.toLowerCase().includes("google") || comp.name.toLowerCase().includes("microsoft") || comp.name.toLowerCase().includes("amazon") || comp.name.toLowerCase().includes("meta") || comp.name.toLowerCase().includes("apple")) {
-            isBigCompany = true;
-          }
-        }
-      } else {
-        const lowerName = companyName.toLowerCase();
-        if (lowerName.includes("stripe") || lowerName.includes("google") || lowerName.includes("microsoft") || lowerName.includes("amazon") || lowerName.includes("meta") || lowerName.includes("apple") || lowerName.includes("netflix")) {
-          isBigCompany = true;
-        }
-      }
 
       // Large company penalty vs Small startup boost
       let sizeMultiplier = 1.0;

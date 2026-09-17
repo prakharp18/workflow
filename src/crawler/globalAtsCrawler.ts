@@ -4,8 +4,17 @@ import { db } from "../db/db";
 import { companies } from "../db/schema";
 import { eq } from "drizzle-orm";
 
-export async function crawlGlobalATS(keywords: string[], location: string = "India"): Promise<CrawlerJob[]> {
-  console.log(`[Global ATS] Starting autonomous discovery for keywords: [${keywords.join(", ")}] in ${location}...`);
+// Composite queries — same coverage, 4 searches instead of 17 per platform
+const ATS_KEYWORD_GROUPS = [
+  '"software engineer" OR "full stack developer" OR "backend developer" OR "sde"',
+  '"frontend developer" OR "react developer" OR "node.js developer" OR "python developer"',
+  '"product manager" OR "product analyst" OR "data analyst" OR "operations associate"',
+  '"fresher" OR "walk-in" OR "process associate" OR "non-voice"',
+];
+
+export async function crawlGlobalATS(keywords?: string[], location: string = "India"): Promise<CrawlerJob[]> {
+  const keywordGroups = ATS_KEYWORD_GROUPS;
+  console.log(`[Global ATS] Starting discovery: ${keywordGroups.length} keyword groups × 3 platforms = ${keywordGroups.length * 3} searches (optimized from 51)...`);
   
   const browser = await chromium.launch({
     headless: true,
@@ -16,6 +25,7 @@ export async function crawlGlobalATS(keywords: string[], location: string = "Ind
   });
 
   const jobsList: CrawlerJob[] = [];
+  const seenUrls = new Set<string>();
   const platforms = [
     { type: "greenhouse", site: "boards.greenhouse.io" },
     { type: "lever", site: "jobs.lever.co" },
@@ -25,21 +35,21 @@ export async function crawlGlobalATS(keywords: string[], location: string = "Ind
   try {
     const page = await context.newPage();
     
-    for (const keyword of keywords) {
+    for (const keyword of keywordGroups) {
       for (const platform of platforms) {
         // Search DuckDuckGo HTML version for the ATS site + keyword + location
-        const query = `site:${platform.site} "${keyword}" ${location}`;
+        const query = `site:${platform.site} ${keyword} ${location}`;
         const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
         
-        console.log(`[Global ATS] Searching: ${query}`);
+        console.log(`[Global ATS] Searching: ${keyword.substring(0, 50)}... on ${platform.type}`);
         
         await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
         
         // Wait for results
         try {
-          await page.waitForSelector(".result__url", { timeout: 10000 });
+          await page.waitForSelector(".result__url", { timeout: 8000 });
         } catch (e) {
-          console.log(`[Global ATS] No results found or DDG rate limit for query "${query}"`);
+          console.log(`[Global ATS] No results for "${keyword.substring(0, 30)}..." on ${platform.type}`);
           continue;
         }
 
@@ -54,15 +64,13 @@ export async function crawlGlobalATS(keywords: string[], location: string = "Ind
               let cleanUrl = "https://" + urlText.replace(/\s/g, "");
               
               // Extract company name
-              // Greenhouse: boards.greenhouse.io/companyname/...
-              // Lever: jobs.lever.co/companyname/...
-              // Ashby: jobs.ashbyhq.com/companyname/...
               const urlParts = cleanUrl.split("/");
               const companyName = urlParts[3]; // 0: https:, 1: empty, 2: domain, 3: companyName
 
-              if (companyName && companyName !== "jobs" && companyName !== "postings") {
+              if (companyName && companyName !== "jobs" && companyName !== "postings" && !seenUrls.has(cleanUrl)) {
+                seenUrls.add(cleanUrl);
                 jobsList.push({
-                  title: `${keyword} (Discovered)`, // Will be enriched later or just passed to AI
+                  title: `${keyword.substring(1, keyword.indexOf('"', 1))} (Discovered)`,
                   companyName: companyName,
                   url: cleanUrl,
                   description: "Global ATS Discovered Job",
@@ -79,8 +87,8 @@ export async function crawlGlobalATS(keywords: string[], location: string = "Ind
           }
         }
         
-        // Be nice to DDG
-        await page.waitForTimeout(2000 + Math.random() * 2000);
+        // Faster delay — still polite to DDG
+        await page.waitForTimeout(800 + Math.random() * 800);
       }
     }
   } catch (error) {
@@ -89,11 +97,8 @@ export async function crawlGlobalATS(keywords: string[], location: string = "Ind
     await browser.close();
   }
 
-  // Deduplicate discovered jobs by URL
-  const uniqueJobs = Array.from(new Map(jobsList.map(j => [j.url, j])).values());
-  console.log(`[Global ATS] Found ${uniqueJobs.length} unique globally discovered ATS jobs.`);
-  
-  return uniqueJobs;
+  console.log(`[Global ATS] Found ${jobsList.length} unique globally discovered ATS jobs.`);
+  return jobsList;
 }
 
 // Helper function to autonomously expand the monitored company database

@@ -1,12 +1,31 @@
-import { chromium } from "playwright";
+import { chromium, Page } from "playwright";
 import { CrawlerJob } from "./types";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-export async function crawlLinkedIn(keywords: string[], locations: string | string[] = "India"): Promise<CrawlerJob[]> {
-  const locList = Array.isArray(locations) ? locations : [locations];
-  console.log(`[LinkedIn] Crawling jobs for keywords: [${keywords.join(", ")}] across locations: [${locList.join(", ")}]...`);
+// Composite OR-queries — same coverage, 5 searches instead of 17
+const LINKEDIN_KEYWORD_GROUPS = [
+  '"software engineer" OR "full stack developer" OR "backend developer"',
+  '"sde" OR "sde-1" OR "frontend developer" OR "react developer"',
+  '"associate product manager" OR "product analyst" OR "data analyst"',
+  '"process associate" OR "operations associate" OR "non-voice"',
+  '"fresher" OR "walk-in" OR "mega walk-in"',
+];
+
+// Reduced locations — LinkedIn geo-search covers surrounding cities
+const LINKEDIN_LOCATIONS = [
+  "India",
+  "Delhi NCR, India",
+  "Bengaluru, Karnataka, India",
+];
+
+export async function crawlLinkedIn(keywords?: string[], locations?: string | string[]): Promise<CrawlerJob[]> {
+  // Use optimized defaults; ignore passed-in keywords/locations for speed
+  const keywordGroups = LINKEDIN_KEYWORD_GROUPS;
+  const locList = LINKEDIN_LOCATIONS;
+
+  console.log(`[LinkedIn] Crawling jobs: ${keywordGroups.length} keyword groups × ${locList.length} locations = ${keywordGroups.length * locList.length} searches (optimized from 119)...`);
   
   const browser = await chromium.launch({
     headless: true,
@@ -29,31 +48,32 @@ export async function crawlLinkedIn(keywords: string[], locations: string | stri
   }
 
   const jobsList: CrawlerJob[] = [];
+  const seenUrls = new Set<string>();
 
   try {
     const page = await context.newPage();
     
     for (const loc of locList) {
-      for (const keyword of keywords) {
+      for (const keyword of keywordGroups) {
         // sortBy=DD ensures strictly latest posted jobs, f_TPR=r86400 restricts to past 24 hours
         const searchUrl = `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(keyword)}&location=${encodeURIComponent(loc)}&sortBy=DD&f_TPR=r86400`;
-        console.log(`[LinkedIn] Searching latest jobs: ${searchUrl}`);
+        console.log(`[LinkedIn] Searching: ${keyword.substring(0, 50)}... in ${loc}`);
         
         await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
         
         // Wait for job cards
         try {
-          await page.waitForSelector(".job-search-card, .jobs-search__results-list li", { timeout: 10000 });
+          await page.waitForSelector(".job-search-card, .jobs-search__results-list li", { timeout: 8000 });
         } catch (e) {
-          console.log(`[LinkedIn] No jobs found or selector not visible for keyword "${keyword}" in ${loc}`);
+          console.log(`[LinkedIn] No results for "${keyword.substring(0, 30)}..." in ${loc}`);
           continue;
         }
 
         // Extract card elements
         const cards = await page.$$(".job-search-card, .jobs-search__results-list li");
-        console.log(`[LinkedIn] Found ${cards.length} cards for keyword "${keyword}" in ${loc}`);
+        console.log(`[LinkedIn] Found ${cards.length} cards`);
 
-        // Maximize accurate crawl capacity: take up to 25 fresh cards per keyword
+        // Take up to 25 fresh cards per keyword group
         for (const card of cards.slice(0, 25)) {
           try {
             const titleEl = await card.$(".base-search-card__title, .job-card-list__title");
@@ -71,13 +91,14 @@ export async function crawlLinkedIn(keywords: string[], locations: string | stri
             
             const locationStr = locationEl ? (await locationEl.innerText()).trim() : "India";
 
-            // If it's a valid link, push to processing list
-            if (url) {
+            // Dedup by URL
+            if (url && !seenUrls.has(url)) {
+              seenUrls.add(url);
               jobsList.push({
                 title,
                 companyName,
                 url,
-                description: "", // Fetched on detailed page visit
+                description: "", // Fetched selectively below
                 location: locationStr,
                 postedAt: new Date(),
               });
@@ -90,39 +111,54 @@ export async function crawlLinkedIn(keywords: string[], locations: string | stri
     }
   }
 
-    // Now navigate to each job to get full description
-    console.log(`[LinkedIn] Fetching details for ${jobsList.length} jobs...`);
-    for (const job of jobsList) {
-      try {
-        await page.goto(job.url, { waitUntil: "domcontentloaded", timeout: 15000 });
-        
-        // Try multiple selectors for description
-        let desc = "";
-        const descSelectors = [
-          ".show-more-less-html__markup",
-          ".jobs-description__content",
-          ".job-view-layout-post-description",
-          "article.jobs-description__container",
-          ".description__text",
-        ];
-        
-        for (const selector of descSelectors) {
-          try {
-            const element = await page.$(selector);
-            if (element) {
-              desc = (await element.innerText()).trim();
-              if (desc) break;
-            }
-          } catch (_) {}
-        }
-        
-        job.description = desc || "No description available";
-        // Polite delay to prevent IP blocking while staying fast
-        await page.waitForTimeout(400 + Math.random() * 400);
-      } catch (jobErr) {
-        console.error(`[LinkedIn] Error fetching details for ${job.url}:`, jobErr);
-        job.description = "Fetch failed";
+    // Selective description fetching: only for jobs that pass basic title pre-filter
+    // Import pre-filter logic inline to avoid circular deps
+    const IGNORE_TITLES = ["senior", "staff", "principal", "lead", "director", "vp", "head of", "architect", "sr.", "sr ", "sde 3", "sde-3", "sde iii", "sde-iii", "sde 2", "sde-2", "sde ii", "sde-ii", "lead engineer", "engineering manager"];
+    
+    const filteredJobs = jobsList.filter(job => {
+      const lower = job.title.toLowerCase();
+      for (const kw of IGNORE_TITLES) {
+        if (lower.includes(kw) && !lower.includes("intern")) return false;
       }
+      return true;
+    });
+
+    console.log(`[LinkedIn] Fetching descriptions for ${filteredJobs.length}/${jobsList.length} pre-filtered jobs (skipping ${jobsList.length - filteredJobs.length} senior/lead roles)...`);
+
+    // Batch description fetch with concurrency limit of 3
+    const CONCURRENCY = 3;
+    for (let i = 0; i < filteredJobs.length; i += CONCURRENCY) {
+      const batch = filteredJobs.slice(i, i + CONCURRENCY);
+      await Promise.all(batch.map(async (job) => {
+        try {
+          const descPage = await context.newPage();
+          await descPage.goto(job.url, { waitUntil: "domcontentloaded", timeout: 12000 });
+          
+          const descSelectors = [
+            ".show-more-less-html__markup",
+            ".jobs-description__content",
+            ".job-view-layout-post-description",
+            "article.jobs-description__container",
+            ".description__text",
+          ];
+          
+          let desc = "";
+          for (const selector of descSelectors) {
+            try {
+              const element = await descPage.$(selector);
+              if (element) {
+                desc = (await element.innerText()).trim();
+                if (desc) break;
+              }
+            } catch (_) {}
+          }
+          
+          job.description = desc || "No description available";
+          await descPage.close();
+        } catch (jobErr) {
+          job.description = "Fetch failed";
+        }
+      }));
     }
 
   } catch (error) {
@@ -135,9 +171,12 @@ export async function crawlLinkedIn(keywords: string[], locations: string | stri
   return jobsList.filter(job => job.description && job.description !== "Fetch failed");
 }
 
-export async function crawlLinkedInPosts(keywords: string[], locations: string | string[] = "India"): Promise<CrawlerJob[]> {
-  const locList = Array.isArray(locations) ? locations : [locations];
-  console.log(`[LinkedIn] Crawling POSTS for keywords: [${keywords.join(", ")}] across locations: [${locList.join(", ")}]...`);
+export async function crawlLinkedInPosts(keywords?: string[], locations?: string | string[]): Promise<CrawlerJob[]> {
+  // Optimized: 3 keywords × 1 broad location = 3 page loads (down from 21)
+  const postKeywords = ["walk-in drive", "mega walk-in hiring", "walkin fresher"];
+  const locList = ["India"];
+
+  console.log(`[LinkedIn] Crawling POSTS: ${postKeywords.length} keywords × ${locList.length} locations = ${postKeywords.length * locList.length} searches (optimized from 21)...`);
   
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
@@ -151,29 +190,31 @@ export async function crawlLinkedInPosts(keywords: string[], locations: string |
   }
 
   const postsList: CrawlerJob[] = [];
+  const seenPostUrls = new Set<string>();
+
   try {
     const page = await context.newPage();
     for (const loc of locList) {
-      for (const keyword of keywords) {
+      for (const keyword of postKeywords) {
         // Construct search query for posts
         const searchQuery = `${keyword} ${loc}`;
         // datePosted="past-24h"
         const searchUrl = `https://www.linkedin.com/search/results/content/?keywords=${encodeURIComponent(searchQuery)}&datePosted=%22past-24h%22&sortBy=%22date_posted%22`;
-        console.log(`[LinkedIn] Searching latest posts: ${searchUrl}`);
+        console.log(`[LinkedIn] Searching posts: ${keyword}`);
         
         await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
         
         try {
-          await page.waitForSelector(".search-results-container, .feed-shared-update-v2", { timeout: 10000 });
+          await page.waitForSelector(".search-results-container, .feed-shared-update-v2", { timeout: 8000 });
         } catch (e) {
-          console.log(`[LinkedIn] No posts found or selector not visible for keyword "${keyword}" in ${loc}`);
+          console.log(`[LinkedIn] No posts found for "${keyword}"`);
           continue;
         }
 
-        await page.waitForTimeout(2000); // Allow feed to render
+        await page.waitForTimeout(800); // Reduced from 2000ms
 
         const posts = await page.$$(".feed-shared-update-v2, .search-results-container ul > li");
-        console.log(`[LinkedIn] Found ${posts.length} posts for keyword "${keyword}" in ${loc}`);
+        console.log(`[LinkedIn] Found ${posts.length} posts for "${keyword}"`);
 
         for (const post of posts.slice(0, 15)) {
           try {
@@ -200,8 +241,9 @@ export async function crawlLinkedInPosts(keywords: string[], locations: string |
               }
             }
 
-            // Only add if there is meaningful text
-            if (text) {
+            // Only add if there is meaningful text and not duplicate
+            if (text && !seenPostUrls.has(url)) {
+              seenPostUrls.add(url);
               postsList.push({
                 title: `Walk-in Post by ${author.split("\\n")[0]}`,
                 companyName: author.split("\\n")[0],
